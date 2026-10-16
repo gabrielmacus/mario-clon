@@ -13,7 +13,7 @@ using FileAccess = Godot.FileAccess;
 namespace MarioClone.Features.World.Presentation;
 
 // Humble Object: lee el archivo del nivel, le pide el plan al caso de uso y lo arma en Godot.
-// También muestra lo que pasa con los bloques (rebote, bloque usado, moneda, ítem) cuando llegan los eventos
+// También muestra lo que pasa con los bloques (rebote, rotura, bloque usado, moneda, ítem) cuando llegan los eventos
 public partial class LevelBuilder : Node2D
 {
     private const int TileSize = Grid.TileSize;
@@ -53,12 +53,14 @@ public partial class LevelBuilder : Node2D
         // 4. Lo que pasa con los bloques llega por evento (efectos de un instante)
         EventBus.Subscribe<BlockBumpedEvent>(OnBlockBumped);
         EventBus.Subscribe<BlockEmptiedEvent>(OnBlockEmptied);
+        EventBus.Subscribe<BlockBrokenEvent>(OnBlockBroken);
     }
 
     public override void _ExitTree()
     {
         EventBus.Unsubscribe<BlockBumpedEvent>(OnBlockBumped);
         EventBus.Unsubscribe<BlockEmptiedEvent>(OnBlockEmptied);
+        EventBus.Unsubscribe<BlockBrokenEvent>(OnBlockBroken);
     }
 
     // Arma el TileSet desde assets/tiles.png (una columna por TileKind, todos sólidos) y pinta el nivel
@@ -152,6 +154,29 @@ public partial class LevelBuilder : Node2D
     }
 
     private void OnBlockBumped(BlockBumpedEvent e) => Bump(e.Cell, TileKind.Brick);
+
+    // Ladrillo roto: desaparece y sus 4 cuartos salen volando en arco
+    private void OnBlockBroken(BlockBrokenEvent e)
+    {
+        _layer.EraseCell(e.Cell);
+
+        var center = new Vector2(e.Cell.X * TileSize + TileSize / 2, e.Cell.Y * TileSize + TileSize / 2);
+        int quarter = TileSize / 2;
+        foreach (var (qx, qy, dx) in new[] { (0, 0, -1), (1, 0, 1), (0, 1, -1), (1, 1, 1) })
+        {
+            var piece = new Sprite2D
+            {
+                Texture = new AtlasTexture { Atlas = TilesTexture, Region = new Rect2((int)TileKind.Brick * TileSize + qx * quarter, qy * quarter, quarter, quarter) },
+                Position = center + new Vector2((qx - 0.5f) * quarter, (qy - 0.5f) * quarter),
+            };
+            AddChild(piece);
+
+            var tween = CreateTween();
+            tween.TweenProperty(piece, "position", piece.Position + new Vector2(dx * 16, qy == 0 ? -40 : -24), 0.2);
+            tween.TweenProperty(piece, "position", piece.Position + new Vector2(dx * 32, 160), 0.5);
+            tween.TweenCallback(Callable.From(piece.QueueFree));
+        }
+    }
 
     private void OnBlockEmptied(BlockEmptiedEvent e)
     {

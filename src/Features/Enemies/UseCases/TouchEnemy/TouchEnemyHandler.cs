@@ -15,7 +15,7 @@ public class TouchEnemyHandler(EnemyRepository repository)
         // 2. De costado o desde abajo: el golpe lo recibe el jugador
         if (input.PlayerVelocityY <= 0 || input.PlayerY >= input.EnemyY)
         {
-            EventBus.Publish(new PlayerHitByEnemyEvent(input.PlayerId));
+            EventBus.Publish(new PlayerHitByEnemyEvent(input.PlayerId, input.EnemyId));
             return;
         }
 

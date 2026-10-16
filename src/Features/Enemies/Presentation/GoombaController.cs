@@ -9,6 +9,7 @@ public partial class GoombaController : CharacterBody2D
 {
     private float _gravity = ProjectSettings.GetSetting("physics/2d/default_gravity").AsSingle();
     private GoombaView _view = null!;
+    private int _direction = -1;   // arranca hacia el jugador
 
     public override void _Ready()
     {
@@ -29,8 +30,10 @@ public partial class GoombaController : CharacterBody2D
 
     public override void _PhysicsProcess(double delta)
     {
-        var result = EnemiesModuleExtensions.Walk.Handle(new WalkInput(GetInstanceId(), Velocity, IsOnFloor(), (float)delta, _gravity));
+        var result = EnemiesModuleExtensions.Walk.Handle(
+            new WalkInput(GetInstanceId(), Velocity, _direction, IsOnFloor(), IsOnWall(), (float)delta, _gravity));
         Velocity = result.Velocity;
+        _direction = result.Direction;
         MoveAndSlide();
 
         // La View dibuja el estado que decidió el Handler

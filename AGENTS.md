@@ -64,6 +64,8 @@ Respondé en **español**.
 | Golpear bloques (reglas) | `src/Features/World/UseCases/HitBlock/HitBlockHandler.cs` |
 | Rebote, bloque usado, moneda e ítem que salen | `LevelBuilder.OnBlockBumped` / `OnBlockEmptied` |
 | Ítems (movimiento y recolección) | `src/Features/Collectibles/` |
+| Efecto de hongo y estrella | `src/Features/Player/UseCases/PowerUp/PowerUpHandler.cs` |
+| Golpe: achicarse, morir o matar con estrella | `src/Features/Player/UseCases/TakeDamage/TakeDamageHandler.cs` |
 | Pisotón vs. golpe | `src/Features/Enemies/UseCases/TouchEnemy/TouchEnemyHandler.cs` |
 | HUD | `src/Features/UI/Presentation/HudController.cs` |
 | Escena principal | `scenes/Main.tscn` |

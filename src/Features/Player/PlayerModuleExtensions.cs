@@ -8,6 +8,7 @@ using MarioClone.Features.Player.UseCases.FallIntoPit;
 using MarioClone.Features.Player.UseCases.FinishLevel;
 using MarioClone.Features.Player.UseCases.GetLives;
 using MarioClone.Features.Player.UseCases.Locomotion;
+using MarioClone.Features.Player.UseCases.PowerUp;
 using MarioClone.Features.Player.UseCases.TakeDamage;
 using MarioClone.Features.Player.UseCases.UpdateInvulnerability;
 using MarioClone.Shared.Messaging;
@@ -26,6 +27,7 @@ public static class PlayerModuleExtensions
     public static DieHandler Die { get; private set; } = null!;
     public static FallIntoPitHandler FallIntoPit { get; private set; } = null!;
     public static FinishLevelHandler FinishLevel { get; private set; } = null!;
+    public static PowerUpHandler PowerUp { get; private set; } = null!;
     public static UpdateInvulnerabilityHandler UpdateInvulnerability { get; private set; } = null!;
     public static GetLivesHandler GetLives { get; private set; } = null!;
 
@@ -41,6 +43,7 @@ public static class PlayerModuleExtensions
         Die = new DieHandler(repository);
         FallIntoPit = new FallIntoPitHandler();
         FinishLevel = new FinishLevelHandler(repository);
+        PowerUp = new PowerUpHandler(repository);
         Locomotion = new UpdateLocomotionHandler(repository);
         UpdateInvulnerability = new UpdateInvulnerabilityHandler(repository);
         GetLives = new GetLivesHandler(repository);
@@ -52,6 +55,7 @@ public static class PlayerModuleExtensions
         EventBus.Register(Bounce);
         EventBus.Register(Die);
         EventBus.Register(FinishLevel);
+        EventBus.Register(PowerUp);
     }
 
     // Partida nueva (game over o nivel completado): se descartan vidas y poder

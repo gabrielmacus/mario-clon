@@ -46,7 +46,7 @@ animations = [{
 
 [node name="Goomba" type="CharacterBody2D"]
 collision_layer = 4
-collision_mask = 1
+collision_mask = 5
 script = ExtResource("1_goomba")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]

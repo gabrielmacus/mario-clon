@@ -4,11 +4,14 @@ public class PlayerData
 {
     // Datos de la partida: sobreviven a perder una vida
     public int Lives { get; set; } = 3;
-    public PowerLevel CurrentPowerLevel { get; set; } = PowerLevel.Small;
 
     // Datos de esta vida: se reinician en cada intento del nivel
-    public float InvulnerableTimeLeft { get; set; } = 0f;   // segundos que le quedan sin poder ser dañado
+    public PowerLevel CurrentPowerLevel { get; set; } = PowerLevel.Small;
+    public bool IsBig => CurrentPowerLevel != PowerLevel.Small;
+    public float InvulnerableTimeLeft { get; set; } = 0f;   // segundos sin poder ser dañado (tras un golpe)
     public bool IsInvulnerable => InvulnerableTimeLeft > 0;
+    public float StarTimeLeft { get; set; } = 0f;           // segundos de estrella: invencible, mata enemigos al tocarlos
+    public bool IsInvincible => StarTimeLeft > 0;
     public bool BounceRequested { get; set; } = false;
     public bool IsDead { get; set; } = false;
     public float DeathElapsed { get; set; } = 0f;          // segundos desde que murió (para la animación de muerte)
@@ -16,7 +19,9 @@ public class PlayerData
 
     public void StartNewLife()
     {
+        CurrentPowerLevel = PowerLevel.Small;   // como en el original: cada vida arranca chico
         InvulnerableTimeLeft = 0f;
+        StarTimeLeft = 0f;
         BounceRequested = false;
         IsDead = false;
         DeathElapsed = 0f;

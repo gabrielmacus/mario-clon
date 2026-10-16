@@ -39,10 +39,11 @@ La arquitectura es **independiente del género**: sirve igual para un top-down, 
 **Qué hay hoy en el juego:**
 - Un nivel diseñado, el **1-1** (`levels/1-1.txt`, 200 tiles de largo): piso, ladrillos, bloques `?`, escaleras, caños, pozos, Goombas, monedas, decoración y bandera con castillo.
 - 100 monedas dan 1 vida.
-- Al Goomba lo matás pisándolo: se aplasta (animación) y rebotás. Si te toca de costado, perdés una vida y Mario parpadea.
+- Al Goomba lo matás pisándolo: se aplasta (animación) y rebotás. Los Goombas dan la vuelta al chocar caños, escaleras u otro Goomba.
+- Power-ups como en el original: Mario arranca **chico**. El **hongo** lo hace crecer; si un enemigo toca a Mario **grande**, se achica y parpadea; si lo toca **chico**, muere. La **estrella** lo hace invencible 10 s (cambia de color) y mata a los enemigos que toca. Grande, **rompe ladrillos**.
 - Todo tiene sprites (en `assets/`, recortados de las hojas de `raw_sprites/`; solo para práctica: son de Nintendo).
-- Los bloques se golpean desde abajo: saltan; los `?` sueltan su contenido y quedan usados (marrones). La moneda sale volando y se suma; el hongo y el 1UP caminan, la estrella rebota. El **1UP suma una vida**; el efecto del hongo y la estrella, y romper ladrillos siendo grande, llegan con la Parte 3.
-- Al recibir daño, Mario queda invulnerable 1,5 s (y parpadea ese tiempo).
+- Los bloques se golpean desde abajo: saltan; los `?` sueltan su contenido y quedan usados (marrones). La moneda sale volando y se suma; el hongo y el 1UP caminan, la estrella rebota. El **1UP suma una vida**.
+- Al achicarse, Mario queda invulnerable 1,5 s (y parpadea ese tiempo).
 - Vidas como en el original: al morir (último golpe o caída a un pozo) el juego se congela, Mario muestra el sprite de muerte, salta y cae. Con vidas de sobra se **reintenta el nivel** (se conservan vidas, monedas y puntaje); sin vidas aparece **GAME OVER** y arranca una partida nueva.
 - Al tocar la bandera aparece **¡NIVEL COMPLETADO!** y arranca una partida nueva.
 
@@ -388,7 +389,7 @@ private void OnPunched(EnemyPunchedEvent e)
 
 El método se llama `Render` y no `Show` porque los nodos de Godot ya tienen un `Show()` (hacerlos visibles).
 
-> Nota: el jugador ya usa sprites (`assets/mario_big.png`, solo para práctica: es arte de Nintendo). El resto sigue con `ColorRect` (greyboxing).
+> Nota: los sprites de Mario están en `assets/mario.png` (grande, chico y muerte; solo para práctica: es arte de Nintendo).
 
 ### 8.9 ¿Estado o evento? El criterio
 
@@ -420,9 +421,14 @@ Cada vez que algo tiene que reaccionar a lo que pasa en el juego, la pregunta es
 | Mario corre, salta, cae | Dura | `UpdateLocomotionHandler` → `LocomotionResult.State` → `PlayerView.Render` |
 | Goomba aplastado | Dura | `WalkHandler` → `WalkResult.Status` → `GoombaView.Render`; el nodo se borra con la señal `AnimationFinished` |
 | Rebote al pisar | Lógica | `BounceHandler` (registrado) → `BounceRequested` → lo consume `UpdateLocomotionHandler` |
-| Parpadeo al recibir daño | Pasa una vez | `TakeDamageHandler` publica `PlayerDamagedEvent` → `PlayerView` lo escucha |
+| Parpadeo al achicarse | Pasa una vez | `TakeDamageHandler` publica `PlayerDamagedEvent` → `PlayerView` lo escucha |
+| Crecer con el hongo | Pasa una vez | `PowerUpHandler` (escucha `ItemCollectedEvent`) cambia el poder y publica `PlayerGrewEvent` → `PlayerView` reproduce "grow" |
+| Tamaño de Mario | Dura | `LocomotionResult.IsBig` → `PlayerController` ajusta la colisión y `PlayerView` elige animaciones `small_*` o grandes |
+| Estrella | Dura | `PowerUpHandler` carga `StarTimeLeft`; `LocomotionResult.IsInvincible` → `PlayerView` cambia los colores |
+| Enemigo tocado con estrella | Pasa una vez | `TakeDamage` publica `StarHitEnemyEvent` → `DefeatByStar` (Enemies) lo derrota |
+| Romper un ladrillo | Pasa una vez | `HitBlock` (con `IsBig`) publica `BlockBrokenEvent` → `LevelBuilder` borra el tile y lanza los pedazos |
 | Monedas y vidas en el HUD | Pasa una vez (cambia de vez en cuando) | Valor inicial con `GetWallet`/`GetLives`; cambios por `WalletUpdatedEvent` / `PlayerLivesChangedEvent` |
-| Invulnerabilidad tras un golpe | Lógica | `TakeDamageHandler` la arranca; `UpdateInvulnerabilityHandler` la descuenta cada frame |
+| Invulnerabilidad tras un golpe | Lógica | `TakeDamageHandler` la arranca; `UpdateInvulnerabilityHandler` la descuenta cada frame (también la estrella) |
 | Muerte de Mario | Pasa una vez (morir) + dura (estar muerto) | `TakeDamage` o `FallIntoPit` publican `PlayerDiedEvent` → `DieHandler` marca `IsDead`; `UpdateLocomotionHandler` lee `IsDead` y hace el movimiento de muerte (`MovementState.Dead`); `PlayerView` muestra "dead" |
 | Game over / reintento | Pasa una vez | `Die` descuenta la vida y publica `LevelRestartEvent` (quedan vidas) o `GameOverEvent` → `GameBootstrap` congela y recarga; el HUD muestra el cartel |
 | Caída a un pozo | Pasa una vez | La línea de `LevelBuilder` llama a `FallIntoPit`, que publica `PlayerDiedEvent` |

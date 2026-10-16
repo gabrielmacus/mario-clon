@@ -29,7 +29,7 @@ public class UpdateLocomotionHandler(PlayerRepository playerRepository)
             else if (before < DeathFreezeSeconds) velocity = new Vector2(0, DeathJumpVelocity);
             else velocity.Y += input.Gravity * input.DeltaTime;
 
-            return new LocomotionResult(velocity, MovementState.Dead, input.CurrentFacing);
+            return new LocomotionResult(velocity, MovementState.Dead, input.CurrentFacing, false, false);
         }
 
         // 0b. Llegó a la bandera: sin controles (solo gravedad y frenado)
@@ -75,6 +75,6 @@ public class UpdateLocomotionHandler(PlayerRepository playerRepository)
         // 6. Hacia dónde mira: si no hay dirección, conserva la anterior
         int facing = input.Direction < 0 ? -1 : input.Direction > 0 ? 1 : input.CurrentFacing;
 
-        return new LocomotionResult(velocity, state, facing);
+        return new LocomotionResult(velocity, state, facing, player.IsBig, player.IsInvincible);
     }
 }

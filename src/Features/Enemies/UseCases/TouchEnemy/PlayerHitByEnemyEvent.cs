@@ -2,4 +2,4 @@ using MarioClone.Shared.Messaging;
 
 namespace MarioClone.Features.Enemies.UseCases.TouchEnemy;
 
-public record PlayerHitByEnemyEvent(int PlayerId) : IEvent;
+public record PlayerHitByEnemyEvent(int PlayerId, ulong EnemyId) : IEvent;

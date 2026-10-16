@@ -14,10 +14,18 @@ public class HitBlockHandler(BlockRepository blockRepository)
         var block = blockRepository.Get(cell);
         if (block == null || block.IsUsed) return;
 
-        // 2. Ladrillo común: solo salta (romperlo requiere ser grande: Parte 3)
+        // 2. Ladrillo común: el jugador grande lo rompe; el chico solo lo hace saltar
         if (block.Content == BlockContent.None)
         {
-            EventBus.Publish(new BlockBumpedEvent(cell));
+            if (input.IsBig)
+            {
+                blockRepository.Remove(cell);
+                EventBus.Publish(new BlockBrokenEvent(cell));
+            }
+            else
+            {
+                EventBus.Publish(new BlockBumpedEvent(cell));
+            }
             return;
         }
 

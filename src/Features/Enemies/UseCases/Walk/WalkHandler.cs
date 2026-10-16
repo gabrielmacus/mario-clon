@@ -18,10 +18,13 @@ public class WalkHandler(EnemyRepository repository)
             velocity.Y += input.Gravity * input.DeltaTime;
         }
 
-        // 2. Camina hacia la izquierda (hacia el jugador), salvo que esté derrotado
-        velocity.X = defeated ? 0 : -Speed;
+        // 2. Chocó una pared (caño, escalera u otro enemigo): da la vuelta
+        int direction = input.IsOnWall ? -input.Direction : input.Direction;
 
-        // 3. Estado para la View
-        return new WalkResult(velocity, defeated ? EnemyStatus.Squashed : EnemyStatus.Walking);
+        // 3. Camina, salvo que esté derrotado
+        velocity.X = defeated ? 0 : direction * Speed;
+
+        // 4. Estado para la View
+        return new WalkResult(velocity, direction, defeated ? EnemyStatus.Squashed : EnemyStatus.Walking);
     }
 }

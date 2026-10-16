@@ -42,7 +42,6 @@ Camera = NodePath("../Player/Camera2D")
 position = Vector2(56, 304)
 
 [node name="Camera2D" type="Camera2D" parent="Player"]
-offset = Vector2(120, 0)
 limit_left = 0
 limit_top = -8
 limit_bottom = 352
