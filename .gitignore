@@ -1,0 +1,27 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# .NET / C# ignores
+[Bb]in/
+[Oo]bj/
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+.idea/
+.vscode/
+
+# Rider / JetBrains
+.idea/
+*.suo
+*.userprefs
+
+# Crash logs and OS files
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Mono / Godot C# specific build artifacts
+.mono/

@@ -1,0 +1,32 @@
+using Godot;
+using MarioClone.Features.Player.UseCases.Locomotion;
+
+namespace MarioClone.Features.Player.Presentation;
+
+public partial class PlayerController : CharacterBody2D
+{
+    [Export] public int PlayerId = 1;
+
+    // Humble Object: delega la decisión al Handler (Caso de Uso)
+    private readonly UpdateLocomotionHandler _locomotion = new();
+    private float _gravity = ProjectSettings.GetSetting("physics/2d/default_gravity").AsSingle();
+
+    public override void _PhysicsProcess(double delta)
+    {
+        // 1. Recolectar estímulos del hardware en un DTO inmutable
+        var input = new LocomotionInput(
+            CurrentVelocity: Velocity,
+            Direction: Input.GetAxis("move_left", "move_right"),
+            JumpRequested: Input.IsActionJustPressed("jump"),
+            IsOnFloor: IsOnFloor(),
+            DeltaTime: (float)delta,
+            Gravity: _gravity
+        );
+
+        // 2. El Handler resuelve la matemática y devuelve la velocidad
+        Velocity = _locomotion.Handle(input, PlayerId);
+
+        // 3. El driver físico de Godot aplica el deslizamiento contra paredes y suelo
+        MoveAndSlide();
+    }
+}
