@@ -37,13 +37,14 @@ La arquitectura es **independiente del género**: sirve igual para un top-down, 
 | Saltar | Espacio, W o ↑ |
 
 **Qué hay hoy en el juego:**
-- El mundo se genera solo en tramos de 640 px a medida que avanzás, y los tramos que quedan atrás se borran.
-- Cada tramo trae piso, 1 a 3 plataformas, monedas y, a veces, un Goomba.
+- Un nivel diseñado, el **1-1** (`levels/1-1.txt`, 200 tiles de largo): piso, ladrillos, bloques `?`, escaleras, caños, pozos, Goombas, monedas, decoración y bandera con castillo.
 - 100 monedas dan 1 vida.
 - Al Goomba lo matás pisándolo: se aplasta (animación) y rebotás. Si te toca de costado, perdés una vida y Mario parpadea.
-- Mario y el Goomba tienen sprites animados (en `assets/`, solo para práctica: son de Nintendo). El resto sigue con cuadrados de color.
+- Todo tiene sprites (en `assets/`, recortados de las hojas de `raw_sprites/`; solo para práctica: son de Nintendo).
+- Los bloques se golpean desde abajo: saltan; los `?` sueltan su contenido y quedan usados (marrones). La moneda sale volando y se suma; el hongo y el 1UP caminan, la estrella rebota. El **1UP suma una vida**; el efecto del hongo y la estrella, y romper ladrillos siendo grande, llegan con la Parte 3.
 - Al recibir daño, Mario queda invulnerable 1,5 s (y parpadea ese tiempo).
-- Con 0 vidas, como en el Mario original: el juego se congela, Mario muestra el sprite de muerte, salta y cae fuera de la pantalla; aparece **GAME OVER** y la partida se reinicia.
+- Vidas como en el original: al morir (último golpe o caída a un pozo) el juego se congela, Mario muestra el sprite de muerte, salta y cae. Con vidas de sobra se **reintenta el nivel** (se conservan vidas, monedas y puntaje); sin vidas aparece **GAME OVER** y arranca una partida nueva.
+- Al tocar la bandera aparece **¡NIVEL COMPLETADO!** y arranca una partida nueva.
 
 ---
 
@@ -138,8 +139,11 @@ mario-clon/
 ├── project.godot                              <-- Configuración de Godot (escena principal, teclas)
 ├── scenes/                                    <-- Escenas (.tscn) = las "vistas"
 │   ├── Main.tscn                              <-- Escena principal: compone todo
-│   ├── Player.tscn · Goomba.tscn · Coin.tscn
-│   ├── Platform.tscn · Ground.tscn · Hud.tscn
+│   ├── Player.tscn · Goomba.tscn · Coin.tscn · Hud.tscn
+├── levels/                                    <-- Niveles en texto (un carácter por celda)
+│   └── 1-1.txt
+├── assets/                                    <-- Sprites recortados que usa el juego
+├── raw_sprites/                               <-- Hojas originales de donde se recortan
 │
 └── src/
     ├── Shared/                                <-- Infraestructura técnica común
@@ -165,12 +169,12 @@ mario-clon/
         │   └── Presentation/
         │       └── [Entity]Controller.cs      <-- Nodo de Godot (Humble Object)
         │
-        ├── Collectibles/   Presentation/CoinNode.cs
+        ├── Collectibles/   Ítems: moverse (MoveItem), agarrarlos (CollectItem), CoinNode e ItemController
         ├── Economy/        Billetera: monedas, puntaje, vida extra
         ├── Enemies/        Repositorio de enemigos, caminar, pisotón/golpe, GoombaController
         ├── Player/         Vidas, movimiento, sumar/restar vidas, PlayerController
         ├── UI/             Presentation/HudController.cs
-        └── World/          Generación de tramos (GenerateSegment) y WorldSpawner
+        └── World/          Carga del nivel (LoadLevel), bandera (CompleteLevel) y LevelBuilder
 ```
 
 **Regla de los namespaces:** siguen las carpetas.
@@ -419,8 +423,13 @@ Cada vez que algo tiene que reaccionar a lo que pasa en el juego, la pregunta es
 | Parpadeo al recibir daño | Pasa una vez | `TakeDamageHandler` publica `PlayerDamagedEvent` → `PlayerView` lo escucha |
 | Monedas y vidas en el HUD | Pasa una vez (cambia de vez en cuando) | Valor inicial con `GetWallet`/`GetLives`; cambios por `WalletUpdatedEvent` / `PlayerLivesChangedEvent` |
 | Invulnerabilidad tras un golpe | Lógica | `TakeDamageHandler` la arranca; `UpdateInvulnerabilityHandler` la descuenta cada frame |
-| Muerte de Mario | Pasa una vez (morir) + dura (estar muerto) | `TakeDamage` publica `PlayerDiedEvent` → `DieHandler` marca `IsDead` y publica `GameOverEvent`; `UpdateLocomotionHandler` lee `IsDead` y hace el movimiento de muerte (`MovementState.Dead`); `PlayerView` muestra "dead" |
-| Game over | Pasa una vez | `GameOverEvent` (lo publica `Die`) → `GameBootstrap` congela el juego y reinicia; el HUD muestra el cartel |
+| Muerte de Mario | Pasa una vez (morir) + dura (estar muerto) | `TakeDamage` o `FallIntoPit` publican `PlayerDiedEvent` → `DieHandler` marca `IsDead`; `UpdateLocomotionHandler` lee `IsDead` y hace el movimiento de muerte (`MovementState.Dead`); `PlayerView` muestra "dead" |
+| Game over / reintento | Pasa una vez | `Die` descuenta la vida y publica `LevelRestartEvent` (quedan vidas) o `GameOverEvent` → `GameBootstrap` congela y recarga; el HUD muestra el cartel |
+| Caída a un pozo | Pasa una vez | La línea de `LevelBuilder` llama a `FallIntoPit`, que publica `PlayerDiedEvent` |
+| Bandera | Pasa una vez | `CompleteLevel` publica `LevelCompletedEvent` → `FinishLevel` (Player) quita los controles; HUD y `GameBootstrap` reaccionan |
+| Golpear un bloque | Pasa una vez | `PlayerController` detecta el cabezazo y llama a `HitBlock` → `BlockBumpedEvent` o `BlockEmptiedEvent` → `LevelBuilder` hace el rebote, deja el bloque usado y suelta moneda o ítem; Economy suma la moneda |
+| Ítem que camina o rebota | Dura | `ItemController` → `MoveItem` (velocidad y dirección) en cada frame |
+| Agarrar un ítem | Pasa una vez | `CollectItem` publica `ItemCollectedEvent` → `AddLife` suma una vida si es 1UP |
 
 **Valores iniciales: casos de uso de consulta.** Un evento solo avisa de *cambios*; al arrancar todavía no hubo ninguno. Por eso, quien necesita el valor actual (por ejemplo el HUD en `_Ready`) lo pide **una vez** a un Handler de consulta: `GetLivesHandler`, `GetWalletHandler`. Es una *query* de sistemas de gestión: **solo lee**, no modifica nada ni publica eventos, y devuelve un valor o un `[Algo]Result` (nunca la entidad, para que la presentación no pueda modificarla).
 
@@ -459,8 +468,9 @@ Además:
 | 1 — Mundo | 1 | Piso, plataformas | — |
 | 2 — Jugador | 2 | `Player` | Mundo (1) |
 | 3 — Enemigos | 4 | `Goomba` | Mundo (1) |
+| 4 — Ítems | 8 | Hongo, 1UP, estrella | Mundo (1) |
 
-Los detectores (Area2D) no ocupan capa (`collision_layer = 0`) y miran al jugador (`collision_mask = 2`): la moneda y el `Hitbox` del Goomba.
+Los detectores (Area2D) no ocupan capa (`collision_layer = 0`) y miran al jugador (`collision_mask = 2`): la moneda, el `Hitbox` del Goomba, el de los ítems y la bandera. La línea de los pozos mira a jugador, enemigos e ítems (`2 | 4 | 8`).
 Jugador y enemigos **se atraviesan**: el contacto lo detecta el `Hitbox` y lo decide `TouchEnemyHandler`.
 
 ---
@@ -484,10 +494,37 @@ Jugador y enemigos **se atraviesan**: el contacto lo detecta el `Hitbox` y lo de
 - **Comportamiento distinto** (uno que vuela): un controller nuevo en `Enemies/Presentation/`, un caso de uso de movimiento nuevo (por ejemplo `UseCases/Fly/`) y reutilizar `EnemyRepository`, `SpawnEnemy`, `DespawnEnemy` y `TouchEnemy`.
 - Todos los enemigos van dentro de la feature `Enemies`. Solo se separa en otra feature algo con reglas propias grandes (por ejemplo, un jefe con fases).
 
-### Algo que aparezca en el mundo
-1. Crear la escena en `scenes/`.
-2. Agregar su lista de posiciones a `SegmentPlan` y decidir dónde va en `GenerateSegmentHandler`.
-3. Agregar un `[Export] PackedScene` en `WorldSpawner`, instanciarlo en `Spawn()` y asignarlo en `Main.tscn`.
+### Algo nuevo que se ubique en el nivel
+1. Crear la escena en `scenes/` (o la textura en `assets/`, si es decoración).
+2. Elegir un carácter libre y agregarlo a `LoadLevelHandler` (y a `EntityKind` o `TileKind`).
+3. En `LevelBuilder.Place`, decir qué se crea para ese tipo; agregar el `[Export]` y asignarlo en `Main.tscn`.
+4. Usar el carácter en `levels/*.txt` y documentarlo en la leyenda (sección 11b).
+
+### 11b. Niveles: formato del archivo
+
+Cada nivel es un `.txt` en `levels/`: **una línea por fila y un carácter por celda de 16×16**. El piso son las filas 20 y 21; la fila 19 es "sobre el piso". Cualquier carácter que no esté en la leyenda es aire (se usa `.`).
+
+| Carácter | Qué es | Tipo |
+|---|---|---|
+| `#` | Piso | Bloque |
+| `B` | Ladrillo | Bloque |
+| `E` | Ladrillo con estrella (Parte 2) | Bloque |
+| `?` | Bloque `?` con moneda | Bloque |
+| `M` | Bloque `?` con hongo (Parte 2) | Bloque |
+| `L` | Bloque `?` con 1UP (Parte 2) | Bloque |
+| `S` | Bloque de escalera | Bloque |
+| `[` `]` | Boca del caño (izquierda, derecha) | Bloque |
+| `(` `)` | Cuerpo del caño (izquierda, derecha) | Bloque |
+| `P` | Inicio del jugador (los pies sobre el borde inferior de la celda) | — |
+| `g` | Goomba | Entidad |
+| `o` | Moneda | Entidad |
+| `F` | Mástil con bandera (se apoya sobre la celda de abajo) | Entidad |
+| `K` | Castillo (esquina inferior izquierda) | Decoración |
+| `c` | Nube (esquina superior izquierda) | Decoración |
+| `h` | Colina (esquina inferior izquierda) | Decoración |
+| `b` | Arbusto (esquina inferior izquierda) | Decoración |
+
+Debajo del nivel hay una línea invisible: quien la cruza cayó a un pozo.
 
 ### Una feature nueva
 1. Crear `Features/[Feature]/` con `Models/`, `UseCases/` y `Presentation/` según haga falta.
@@ -497,6 +534,8 @@ Jugador y enemigos **se atraviesan**: el contacto lo detecta el `Hitbox` y lo de
 ---
 
 ## 12. Decisiones y límites conocidos
+
+- **Datos de la partida y datos de la vida.** `PlayerRepository` y `WalletRepository` se crean **una vez por partida** (no por escena): así vidas, monedas y puntaje sobreviven a la recarga de la escena al reintentar el nivel. Lo de "esta vida" (muerto, invulnerable, rebote, bandera) se reinicia con `PlayerData.StartNewLife()`. Con game over o nivel completado, `GameBootstrap` llama a `ResetSession()` y todo arranca de cero. El resto de los repositorios (enemigos) se recrean en cada carga.
 
 - **Los datos viven fuera de los nodos**, en repositorios. Ideal para cosas únicas y permanentes (vidas, monedas, puntaje) y para simulaciones con muchas entidades. Para entidades que nacen y mueren seguido, es obligatoria la regla de alta/baja de la sección 8.6.
 - **Acceso estático:** los Handlers se usan desde cualquier lado a través de `[Feature]ModuleExtensions`. Es simple y navegable, a cambio de ser, en la práctica, global.

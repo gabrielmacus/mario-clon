@@ -4,10 +4,16 @@
 [ext_resource type="PackedScene" path="res://scenes/Hud.tscn" id="2_hud"]
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="3_player"]
 [ext_resource type="PackedScene" path="res://scenes/Coin.tscn" id="4_coin"]
-[ext_resource type="PackedScene" path="res://scenes/Platform.tscn" id="5_plat"]
-[ext_resource type="PackedScene" path="res://scenes/Ground.tscn" id="6_ground"]
-[ext_resource type="Script" path="res://src/Features/World/Presentation/WorldSpawner.cs" id="7_spawner"]
-[ext_resource type="PackedScene" path="res://scenes/Goomba.tscn" id="8_goomba"]
+[ext_resource type="PackedScene" path="res://scenes/Goomba.tscn" id="5_goomba"]
+[ext_resource type="Script" path="res://src/Features/World/Presentation/LevelBuilder.cs" id="6_level"]
+[ext_resource type="Texture2D" path="res://assets/tiles.png" id="7_tiles"]
+[ext_resource type="Texture2D" path="res://assets/cloud.png" id="8_cloud"]
+[ext_resource type="Texture2D" path="res://assets/hill.png" id="9_hill"]
+[ext_resource type="Texture2D" path="res://assets/bush.png" id="10_bush"]
+[ext_resource type="Texture2D" path="res://assets/flag.png" id="11_flag"]
+[ext_resource type="Texture2D" path="res://assets/castle.png" id="12_castle"]
+[ext_resource type="PackedScene" path="res://scenes/Item.tscn" id="13_item"]
+[ext_resource type="Texture2D" path="res://assets/coin.png" id="14_coin"]
 
 [node name="Main" type="Node2D"]
 
@@ -16,19 +22,27 @@ script = ExtResource("1_boot")
 
 [node name="HUD" parent="." instance=ExtResource("2_hud")]
 
-[node name="WorldSpawner" type="Node2D" parent="." node_paths=PackedStringArray("Target")]
-script = ExtResource("7_spawner")
-GroundScene = ExtResource("6_ground")
-PlatformScene = ExtResource("5_plat")
+[node name="Level" type="Node2D" parent="." node_paths=PackedStringArray("PlayerBody", "Camera")]
+script = ExtResource("6_level")
+LevelPath = "res://levels/1-1.txt"
+TilesTexture = ExtResource("7_tiles")
+CloudTexture = ExtResource("8_cloud")
+HillTexture = ExtResource("9_hill")
+BushTexture = ExtResource("10_bush")
+FlagTexture = ExtResource("11_flag")
+CastleTexture = ExtResource("12_castle")
+GoombaScene = ExtResource("5_goomba")
 CoinScene = ExtResource("4_coin")
-EnemyScene = ExtResource("8_goomba")
-Target = NodePath("../Player")
+ItemScene = ExtResource("13_item")
+CoinTexture = ExtResource("14_coin")
+PlayerBody = NodePath("../Player")
+Camera = NodePath("../Player/Camera2D")
 
 [node name="Player" parent="." instance=ExtResource("3_player")]
-position = Vector2(80, 200)
+position = Vector2(56, 304)
 
 [node name="Camera2D" type="Camera2D" parent="Player"]
-offset = Vector2(200, 0)
+offset = Vector2(120, 0)
 limit_left = 0
-limit_top = 0
-limit_bottom = 360
+limit_top = -8
+limit_bottom = 352

@@ -1,6 +1,8 @@
 using Godot;
 using MarioClone.Features.Player.Models;
 using MarioClone.Features.Player.UseCases.Locomotion;
+using MarioClone.Features.World;
+using MarioClone.Features.World.UseCases.HitBlock;
 
 namespace MarioClone.Features.Player.Presentation;
 
@@ -40,10 +42,32 @@ public partial class PlayerController : CharacterBody2D
         _facing = result.Facing;
 
         // 3. Aplicar el movimiento: vivo, con colisiones (MoveAndSlide); muerto, atraviesa todo y cae
-        if (result.State == MovementState.Dead) Position += Velocity * (float)delta;
-        else MoveAndSlide();
+        if (result.State == MovementState.Dead)
+        {
+            Position += Velocity * (float)delta;
+        }
+        else
+        {
+            MoveAndSlide();
+            DetectHeadHit();
+        }
 
         // 4. La View dibuja el estado que decidió el Handler
         _view.Render(result.State, result.Facing);
+    }
+
+    // Si chocó algo con la cabeza, avisa al caso de uso HitBlock (él decide si había un bloque golpeable)
+    private void DetectHeadHit()
+    {
+        for (int i = 0; i < GetSlideCollisionCount(); i++)
+        {
+            var collision = GetSlideCollision(i);
+            if (collision.GetNormal().Y > 0.5f)
+            {
+                var head = new Vector2(GlobalPosition.X, collision.GetPosition().Y - 1);
+                WorldModuleExtensions.HitBlock.Handle(new HitBlockInput(PlayerId, head));
+                return;
+            }
+        }
     }
 }

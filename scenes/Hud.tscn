@@ -22,11 +22,11 @@ text = "MONEDAS: --"
 layout_mode = 2
 text = "VIDAS: -"
 
-[node name="GameOverLabel" type="Label" parent="."]
+[node name="MessageLabel" type="Label" parent="."]
 visible = false
 offset_top = 160.0
 offset_right = 640.0
 offset_bottom = 200.0
-text = "GAME OVER"
+text = ""
 horizontal_alignment = 1
 vertical_alignment = 1

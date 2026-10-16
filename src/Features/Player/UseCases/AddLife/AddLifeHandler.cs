@@ -1,3 +1,5 @@
+using MarioClone.Features.Collectibles.Models;
+using MarioClone.Features.Collectibles.UseCases.CollectItem;
 using MarioClone.Features.Economy.UseCases.CollectCoin;
 using MarioClone.Features.Player.Events;
 using MarioClone.Features.Player.Models;
@@ -5,14 +7,23 @@ using MarioClone.Shared.Messaging;
 
 namespace MarioClone.Features.Player.UseCases.AddLife;
 
-public class AddLifeHandler(PlayerRepository playerRepository) : IEventHandler<BonusLifeAwardedEvent>
+public class AddLifeHandler(PlayerRepository playerRepository)
+	: IEventHandler<BonusLifeAwardedEvent>, IEventHandler<ItemCollectedEvent>
 {
-	// Único método: reacciona al evento desacoplado
-	public void Handle(BonusLifeAwardedEvent @event)
+	// 100 monedas
+	public void Handle(BonusLifeAwardedEvent @event) => GrantLife(@event.PlayerId);
+
+	// Hongo verde (1UP)
+	public void Handle(ItemCollectedEvent @event)
 	{
-		var player = playerRepository.GetPlayer(@event.PlayerId);
+		if (@event.Kind == ItemKind.OneUp) GrantLife(@event.PlayerId);
+	}
+
+	private void GrantLife(int playerId)
+	{
+		var player = playerRepository.GetPlayer(playerId);
 		player.Lives += 1;
 
-		EventBus.Publish(new PlayerLivesChangedEvent(@event.PlayerId, player.Lives));
+		EventBus.Publish(new PlayerLivesChangedEvent(playerId, player.Lives));
 	}
 }

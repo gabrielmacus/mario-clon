@@ -1,0 +1,89 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/Features/Collectibles/Presentation/ItemController.cs" id="1_item"]
+[ext_resource type="Texture2D" path="res://assets/items.png" id="2_tex"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_body"]
+size = Vector2(14, 16)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_hitbox"]
+size = Vector2(16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_mushroom"]
+atlas = ExtResource("2_tex")
+region = Rect2(0, 0, 16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_oneup"]
+atlas = ExtResource("2_tex")
+region = Rect2(16, 0, 16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_star1"]
+atlas = ExtResource("2_tex")
+region = Rect2(32, 0, 16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_star2"]
+atlas = ExtResource("2_tex")
+region = Rect2(48, 0, 16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_star3"]
+atlas = ExtResource("2_tex")
+region = Rect2(64, 0, 16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_star4"]
+atlas = ExtResource("2_tex")
+region = Rect2(80, 0, 16, 16)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_items"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_mushroom")
+}],
+"loop": true,
+"name": &"mushroom",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_oneup")
+}],
+"loop": true,
+"name": &"oneup",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_star1")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_star2")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_star3")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_star4")
+}],
+"loop": true,
+"name": &"star",
+"speed": 10.0
+}]
+
+[node name="Item" type="CharacterBody2D"]
+collision_layer = 8
+collision_mask = 1
+script = ExtResource("1_item")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_body")
+
+[node name="Sprite" type="AnimatedSprite2D" parent="."]
+sprite_frames = SubResource("SpriteFrames_items")
+animation = &"mushroom"
+
+[node name="Hitbox" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 2
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox"]
+shape = SubResource("RectangleShape2D_hitbox")

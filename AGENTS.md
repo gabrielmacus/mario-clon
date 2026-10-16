@@ -36,7 +36,7 @@ Respondé en **español**.
 | 11 | Nodo que hace `Subscribe` en `_Ready` hace `Unsubscribe` en `_ExitTree` | ver `HudController` | suscribirse sin desuscribirse |
 | 12 | Siempre `using` + nombre corto | `using Godot;` … `Vector2` | `Godot.Vector2`, `MarioClone.Features.X.Y` en el código |
 | 13 | Eventos y Handlers sobre una entidad llevan su ID | `int PlayerId = 1`, `ulong EnemyId` | sin ID |
-| 14 | Namespace = carpeta | `src/Features/World/UseCases/GenerateSegment` → `MarioClone.Features.World.UseCases.GenerateSegment` | — |
+| 14 | Namespace = carpeta | `src/Features/World/UseCases/LoadLevel` → `MarioClone.Features.World.UseCases.LoadLevel` | — |
 | 15 | Todos los enemigos dentro de la feature `Enemies` | `Enemies/Presentation/KoopaController.cs` | feature `Koopa/` |
 | 16 | La View solo traduce: el **estado** (Idle, Running...) lo decide el Handler y la View lo mapea a una animación en cada frame | `_view.Render(result.State, result.Facing)` con un `switch` estado → animación | `if`s en la View que deciden si corre o salta; publicar `PlayerRunningEvent` cada frame |
 | 17 | Animaciones de **momento** (golpe, pisotón) se disparan escuchando eventos, filtrando por ID | `EnemyView` escucha `EnemyPunchedEvent` | el Handler llamando a una animación |
@@ -57,16 +57,23 @@ Respondé en **español**.
 | Registrar módulos | `src/Shared/Bootstrap/GameBootstrap.cs` |
 | Bus de eventos | `src/Shared/Messaging/EventBus.cs` |
 | Movimiento del jugador | `src/Features/Player/UseCases/Locomotion/UpdateLocomotionHandler.cs` |
-| Qué aparece en cada tramo | `src/Features/World/UseCases/GenerateSegment/GenerateSegmentHandler.cs` |
-| Instanciar/borrar tramos | `src/Features/World/Presentation/WorldSpawner.cs` |
+| El nivel (texto) | `levels/1-1.txt` (leyenda en README, sección 11b) |
+| Leer el nivel | `src/Features/World/UseCases/LoadLevel/LoadLevelHandler.cs` |
+| Armar el nivel en Godot (tiles, entidades, bandera, pozos) | `src/Features/World/Presentation/LevelBuilder.cs` |
+| Morir, reintentar, game over | `src/Features/Player/UseCases/Die/DieHandler.cs` + `GameBootstrap` |
+| Golpear bloques (reglas) | `src/Features/World/UseCases/HitBlock/HitBlockHandler.cs` |
+| Rebote, bloque usado, moneda e ítem que salen | `LevelBuilder.OnBlockBumped` / `OnBlockEmptied` |
+| Ítems (movimiento y recolección) | `src/Features/Collectibles/` |
 | Pisotón vs. golpe | `src/Features/Enemies/UseCases/TouchEnemy/TouchEnemyHandler.cs` |
 | HUD | `src/Features/UI/Presentation/HudController.cs` |
 | Escena principal | `scenes/Main.tscn` |
 | Teclas (input map) | `project.godot`, sección `[input]` |
 
-**Capas de colisión:** 1 = mundo (bit 1), 2 = jugador (bit 2), 3 = enemigos (bit 4). Las Area2D detectoras usan `collision_layer = 0` y `collision_mask = 2`.
+**Capas de colisión:** 1 = mundo (bit 1), 2 = jugador (bit 2), 3 = enemigos (bit 4), 4 = ítems (bit 8). Las Area2D detectoras usan `collision_layer = 0` y `collision_mask = 2`.
 
-**Medidas útiles:** viewport 640×360; superficie del piso en y = 320; salto del jugador ≈ 78 px de alto; tramos de 640 px.
+**Medidas útiles:** viewport 640×360; tiles de 16×16; nivel 1-1 de 200×22 celdas; superficie del piso en y = 320 (fila 20); salto del jugador ≈ 78 px (≈ 4 tiles) de alto.
+
+**Repositorios por partida:** `PlayerRepository` y `WalletRepository` sobreviven a la recarga de escena (vidas, monedas); se descartan con `ResetSession()` en game over o nivel completado. No los recrees en cada `Add[Feature]Module()`.
 
 ---
 

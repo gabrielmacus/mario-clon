@@ -32,6 +32,9 @@ public class UpdateLocomotionHandler(PlayerRepository playerRepository)
             return new LocomotionResult(velocity, MovementState.Dead, input.CurrentFacing);
         }
 
+        // 0b. Llegó a la bandera: sin controles (solo gravedad y frenado)
+        if (player.HasFinished) input = input with { Direction = 0, JumpRequested = false };
+
         // 1. Gravedad
         if (!input.IsOnFloor)
         {

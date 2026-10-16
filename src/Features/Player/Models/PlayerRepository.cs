@@ -16,8 +16,9 @@ public class PlayerRepository
         return player;
     }
 
-    public void Reset()
+    // Nuevo intento del nivel: se conservan vidas y poder, se reinicia lo de la vida anterior
+    public void StartNewLife()
     {
-        _players.Clear();
+        foreach (var player in _players.Values) player.StartNewLife();
     }
 }
