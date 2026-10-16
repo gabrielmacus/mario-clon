@@ -1,7 +1,6 @@
 using Godot;
-using MarioClone.Features.Enemies.UseCases.TouchEnemy;
+using MarioClone.Features.Player.Models;
 using MarioClone.Features.Player.UseCases.Locomotion;
-using MarioClone.Shared.Messaging;
 
 namespace MarioClone.Features.Player.Presentation;
 
@@ -10,27 +9,20 @@ public partial class PlayerController : CharacterBody2D
     [Export] public int PlayerId = 1;
 
     // Humble Object: delega la decisión al Handler (Caso de Uso)
-    private readonly UpdateLocomotionHandler _locomotion = new();
     private float _gravity = ProjectSettings.GetSetting("physics/2d/default_gravity").AsSingle();
-    private bool _bounceRequested;
+    private int _facing = 1;
+    private PlayerView _view = null!;
 
     public override void _Ready()
     {
-        EventBus.Subscribe<EnemyStompedEvent>(OnEnemyStomped);
-    }
-
-    public override void _ExitTree()
-    {
-        EventBus.Unsubscribe<EnemyStompedEvent>(OnEnemyStomped);
-    }
-
-    private void OnEnemyStomped(EnemyStompedEvent e)
-    {
-        if (e.PlayerId == PlayerId) _bounceRequested = true;
+        _view = GetNode<PlayerView>("View");
     }
 
     public override void _PhysicsProcess(double delta)
     {
+        // 0. Descontar el tiempo de invulnerabilidad
+        PlayerModuleExtensions.UpdateInvulnerability.Handle(PlayerId, (float)delta);
+
         // 1. Recolectar estímulos del hardware en un DTO inmutable
         var input = new LocomotionInput(
             CurrentVelocity: Velocity,
@@ -39,14 +31,19 @@ public partial class PlayerController : CharacterBody2D
             IsOnFloor: IsOnFloor(),
             DeltaTime: (float)delta,
             Gravity: _gravity,
-            BounceRequested: _bounceRequested
+            CurrentFacing: _facing
         );
 
         // 2. El Handler resuelve la matemática y devuelve la velocidad
-        Velocity = _locomotion.Handle(input, PlayerId);
-        _bounceRequested = false;
+        var result = PlayerModuleExtensions.Locomotion.Handle(input, PlayerId);
+        Velocity = result.Velocity;
+        _facing = result.Facing;
 
-        // 3. El driver físico de Godot aplica el deslizamiento contra paredes y suelo
-        MoveAndSlide();
+        // 3. Aplicar el movimiento: vivo, con colisiones (MoveAndSlide); muerto, atraviesa todo y cae
+        if (result.State == MovementState.Dead) Position += Velocity * (float)delta;
+        else MoveAndSlide();
+
+        // 4. La View dibuja el estado que decidió el Handler
+        _view.Render(result.State, result.Facing);
     }
 }

@@ -1,12 +1,69 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://src/Features/Enemies/Presentation/GoombaController.cs" id="1_goomba"]
+[ext_resource type="Texture2D" path="res://assets/goomba.png" id="2_tex"]
+[ext_resource type="Script" path="res://src/Features/Enemies/Presentation/GoombaView.cs" id="3_view"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_body"]
 size = Vector2(16, 16)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_hitbox"]
 size = Vector2(18, 18)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_walk1"]
+atlas = ExtResource("2_tex")
+region = Rect2(0, 0, 24, 18)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_walk2"]
+atlas = ExtResource("2_tex")
+region = Rect2(24, 0, 24, 18)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_walk3"]
+atlas = ExtResource("2_tex")
+region = Rect2(48, 0, 24, 18)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_walk4"]
+atlas = ExtResource("2_tex")
+region = Rect2(72, 0, 24, 18)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_squash1"]
+atlas = ExtResource("2_tex")
+region = Rect2(96, 0, 24, 18)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_squash2"]
+atlas = ExtResource("2_tex")
+region = Rect2(120, 0, 24, 18)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_goomba"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_walk1")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_walk2")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_walk3")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_walk4")
+}],
+"loop": true,
+"name": &"walk",
+"speed": 6.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_squash1")
+}, {
+"duration": 2.0,
+"texture": SubResource("AtlasTexture_squash2")
+}],
+"loop": false,
+"name": &"squash",
+"speed": 4.0
+}]
 
 [node name="Goomba" type="CharacterBody2D"]
 collision_layer = 4
@@ -16,12 +73,12 @@ script = ExtResource("1_goomba")
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_body")
 
-[node name="ColorRect" type="ColorRect" parent="."]
-offset_left = -8.0
-offset_top = -8.0
-offset_right = 8.0
-offset_bottom = 8.0
-color = Color(0.55, 0.3, 0.1, 1)
+[node name="Sprite" type="AnimatedSprite2D" parent="."]
+offset = Vector2(0, -1)
+sprite_frames = SubResource("SpriteFrames_goomba")
+animation = &"walk"
+autoplay = "walk"
+script = ExtResource("3_view")
 
 [node name="Hitbox" type="Area2D" parent="."]
 collision_layer = 0

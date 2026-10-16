@@ -7,13 +7,19 @@ namespace MarioClone.Features.Enemies.Presentation;
 
 public partial class GoombaController : CharacterBody2D
 {
-    private readonly WalkHandler _walk = new();
     private float _gravity = ProjectSettings.GetSetting("physics/2d/default_gravity").AsSingle();
+    private GoombaView _view = null!;
 
     public override void _Ready()
     {
         EnemiesModuleExtensions.SpawnEnemy.Handle(GetInstanceId());
         GetNode<Area2D>("Hitbox").BodyEntered += OnHitboxBodyEntered;
+
+        _view = GetNode<GoombaView>("Sprite");
+
+        // Señal de Godot: "squash" es la única animación sin loop. Al terminar, el nodo se borra
+        // (la baja en el repositorio llega en _ExitTree)
+        _view.AnimationFinished += QueueFree;
     }
 
     public override void _ExitTree()
@@ -23,8 +29,12 @@ public partial class GoombaController : CharacterBody2D
 
     public override void _PhysicsProcess(double delta)
     {
-        Velocity = _walk.Handle(new WalkInput(Velocity, IsOnFloor(), (float)delta, _gravity));
+        var result = EnemiesModuleExtensions.Walk.Handle(new WalkInput(GetInstanceId(), Velocity, IsOnFloor(), (float)delta, _gravity));
+        Velocity = result.Velocity;
         MoveAndSlide();
+
+        // La View dibuja el estado que decidió el Handler
+        _view.Render(result.Status);
     }
 
     private void OnHitboxBodyEntered(Node2D body)
@@ -39,9 +49,6 @@ public partial class GoombaController : CharacterBody2D
             EnemyY: GlobalPosition.Y
         );
 
-        if (EnemiesModuleExtensions.TouchEnemy.Handle(input))
-        {
-            QueueFree();
-        }
+        EnemiesModuleExtensions.TouchEnemy.Handle(input);
     }
 }

@@ -10,5 +10,5 @@ public record LocomotionInput(
     bool IsOnFloor,
     float DeltaTime,
     float Gravity,
-    bool BounceRequested
+    int CurrentFacing
 );

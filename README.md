@@ -40,8 +40,10 @@ La arquitectura es **independiente del género**: sirve igual para un top-down, 
 - El mundo se genera solo en tramos de 640 px a medida que avanzás, y los tramos que quedan atrás se borran.
 - Cada tramo trae piso, 1 a 3 plataformas, monedas y, a veces, un Goomba.
 - 100 monedas dan 1 vida.
-- Al Goomba lo matás pisándolo (y rebotás). Si te toca de costado, perdés una vida.
-- Todavía **no hay game over**: las vidas pueden quedar en negativo.
+- Al Goomba lo matás pisándolo: se aplasta (animación) y rebotás. Si te toca de costado, perdés una vida y Mario parpadea.
+- Mario y el Goomba tienen sprites animados (en `assets/`, solo para práctica: son de Nintendo). El resto sigue con cuadrados de color.
+- Al recibir daño, Mario queda invulnerable 1,5 s (y parpadea ese tiempo).
+- Con 0 vidas, como en el Mario original: el juego se congela, Mario muestra el sprite de muerte, salta y cae fuera de la pantalla; aparece **GAME OVER** y la partida se reinicia.
 
 ---
 
@@ -151,7 +153,7 @@ mario-clon/
     └── Features/                              <-- Un módulo por capacidad del juego
         ├── [Feature]/                         <-- Ej: Player, Economy, Enemies, World
         │   ├── [Feature]ModuleExtensions.cs   <-- Add[Feature]Module(): crea repositorio y Handlers
-        │   ├── Models/
+        │   ├── Models/                        <-- Entidades, repositorios y enums de la feature
         │   │   ├── [Entity]Data.cs            <-- Entidad: un elemento (como una fila)
         │   │   └── [Entity]Repository.cs      <-- Colección indexada por ID (como un DbSet)
         │   ├── UseCases/
@@ -179,6 +181,8 @@ mario-clon/
 ## 8. Las piezas, una por una
 
 ### 8.1 Entidad y repositorio (`Models/`)
+
+`Models/` contiene los tipos que describen el dominio de la feature: **entidades, repositorios y enums** (por ejemplo `MovementState`, `EnemyStatus`, `PowerLevel`).
 
 La entidad son los datos de **un** elemento. El repositorio es la **colección**, indexada por ID.
 
@@ -242,9 +246,12 @@ public static void AddPlayerModule()
     var repository = new PlayerRepository();
     AddLife = new AddLifeHandler(repository);
     TakeDamage = new TakeDamageHandler(repository);
+    Bounce = new BounceHandler(repository);
+    Locomotion = new UpdateLocomotionHandler(repository);
 
     EventBus.Register(AddLife);      // C# deduce el evento desde IEventHandler<T>
     EventBus.Register(TakeDamage);
+    EventBus.Register(Bounce);
 }
 
 // Shared/Bootstrap/GameBootstrap.cs (nodo dentro de Main.tscn)
@@ -268,7 +275,6 @@ El nodo **no calcula**: junta datos, llama al Handler y aplica el resultado.
 public partial class PlayerController : CharacterBody2D
 {
     [Export] public int PlayerId = 1;
-    private readonly UpdateLocomotionHandler _locomotion = new();
 
     public override void _PhysicsProcess(double delta)
     {
@@ -279,11 +285,14 @@ public partial class PlayerController : CharacterBody2D
             IsOnFloor: IsOnFloor(),
             DeltaTime: (float)delta,
             Gravity: _gravity,
-            BounceRequested: _bounceRequested
+            CurrentFacing: _facing
         );
 
-        Velocity = _locomotion.Handle(input, PlayerId);   // decide
-        MoveAndSlide();                                    // aplica
+        var result = PlayerModuleExtensions.Locomotion.Handle(input, PlayerId);   // decide
+        Velocity = result.Velocity;
+        _facing = result.Facing;
+        MoveAndSlide();                                                            // aplica
+        _view.Render(result.State, result.Facing);                                 // dibuja
     }
 }
 ```
@@ -295,7 +304,7 @@ Godot llama a `_ExitTree()` **siempre** que un nodo sale de la escena: lo mataro
 | Si el nodo... | En `_Ready` | En `_ExitTree` |
 |---|---|---|
 | tiene datos en un repositorio | se da de alta (`SpawnEnemy`) | se da de baja (`DespawnEnemy`) |
-| escucha eventos | `EventBus.Subscribe(...)` | `EventBus.Unsubscribe(...)` |
+| escucha eventos (solo Views/HUD, ver 8.9) | `EventBus.Subscribe(...)` | `EventBus.Unsubscribe(...)` |
 
 Si no se respeta, quedan "fantasmas": datos de enemigos que ya no existen o eventos enviados a nodos borrados.
 
@@ -319,6 +328,104 @@ Está en `src/Shared/Messaging/EventBus.cs`. Métodos:
 
 `Publish` recorre una **copia** de la lista, así un suscriptor puede desuscribirse en medio de un evento sin romper nada.
 
+### 8.8 View: cómo se ve (sprites, animaciones, efectos)
+
+La View es un nodo de `Presentation/` que **solo dibuja**. No decide nada: ni reglas, ni estados.
+Hay dos tipos de animación, y cada una se dispara distinto:
+
+| Tipo | Ejemplos | Cómo se dispara |
+|---|---|---|
+| **De estado** (continua) | quieto, corriendo, saltando, cayendo | El Handler devuelve el estado y la View lo **traduce** a una animación en cada frame (sin eventos) |
+| **De momento** (una vez) | golpe, pisotón, moneda, muerte | La View **escucha un evento** del `EventBus` |
+
+**De estado:** decidir en qué estado está la entidad es una regla, así que lo decide el Handler. La View solo traduce, como un diccionario.
+
+```csharp
+// Player/Models/MovementState.cs
+public enum MovementState { Idle, Running, Jumping, Falling }
+
+// Player/UseCases/Locomotion/LocomotionResult.cs
+public record LocomotionResult(Vector2 Velocity, MovementState State, int Facing);
+
+// Player/Presentation/PlayerController.cs
+var result = _locomotion.Handle(input, PlayerId);
+Velocity = result.Velocity;
+MoveAndSlide();
+_view.Render(result.State, result.Facing);
+
+// Player/Presentation/PlayerView.cs (en un AnimatedSprite2D)
+public void Render(MovementState state, int facing)
+{
+    Play(state switch
+    {
+        MovementState.Running => "run",
+        MovementState.Jumping => "jump",
+        MovementState.Falling => "fall",
+        _ => "idle",
+    });
+
+    FlipH = facing < 0;   // hacia dónde mira también lo decide el Handler
+}
+```
+
+Además, el estado queda como dato del dominio: otros Handlers pueden usarlo (por ejemplo, "¿estaba en `Falling`?" para decidir un pisotón).
+
+**De momento:** la View se suscribe en `_Ready`, se desuscribe en `_ExitTree` y filtra por su ID.
+
+```csharp
+private void OnPunched(EnemyPunchedEvent e)
+{
+    if (e.EnemyId != GetInstanceId()) return;   // no es conmigo
+    if (e.BodyPart == BodyPart.Face) _blood.Emitting = true;
+}
+```
+
+**Regla de oro:** el nodo detecta **dónde** pasó algo, el Handler decide **qué significa** (y en qué estado queda la entidad) y la View decide **cómo se ve**. El Handler nunca sabe que existe una animación.
+
+El método se llama `Render` y no `Show` porque los nodos de Godot ya tienen un `Show()` (hacerlos visibles).
+
+> Nota: el jugador ya usa sprites (`assets/mario_big.png`, solo para práctica: es arte de Nintendo). El resto sigue con `ColorRect` (greyboxing).
+
+### 8.9 ¿Estado o evento? El criterio
+
+Cada vez que algo tiene que reaccionar a lo que pasa en el juego, la pregunta es: **¿esto dura o pasa una vez?**
+
+| | **Dura** (estado) | **Pasa una vez** (evento) |
+|---|---|---|
+| Ejemplos | Mario corriendo, Goomba aplastado | Te pegaron, juntaste una moneda, ganaste una vida |
+| Quién lo decide | Un Handler, que lo devuelve en su `Result` | Un Handler, que publica el evento |
+| Cómo llega a la pantalla | El controller se lo pasa a la View en cada frame (`Render`) | La View o el HUD escuchan el evento |
+
+**Quién se suscribe al `EventBus`:**
+
+| Quién | ¿Se suscribe? | Cómo |
+|---|---|---|
+| Handlers (lógica) | ✅ | `EventBus.Register(...)` en `[Feature]ModuleExtensions`. **Nunca** desde un nodo |
+| Controllers (nodos de física) | ❌ | Reciben todo de los Handlers |
+| Views y HUD | ✅ solo para efectos de un instante | `Subscribe` en `_Ready`, `Unsubscribe` en `_ExitTree`, filtrando por ID |
+| `GameBootstrap` | ✅ solo para el **flujo de la aplicación** (reiniciar, cambiar de nivel) | `Subscribe` en `_EnterTree`, `Unsubscribe` en `_ExitTree`. Ejemplo: `GameOverEvent` → pausa y recarga la escena |
+
+**Banderas en el repositorio** (por ejemplo `PlayerData.BounceRequested`):
+- ✅ **Solo para lógica** que llega por un evento y se aplica en el frame siguiente. La prende un Handler y la consume (y apaga) otro Handler. Ejemplo: el rebote al pisar un enemigo cambia la física.
+- ❌ **Nunca para efectos visuales o de sonido** (parpadear, brillar, sangre). El dominio no debe saber cómo se ve el juego, varios interesados se pisarían al apagarla y se acumularían. Para eso, evento a la View.
+
+**Ejemplos del proyecto:**
+
+| Caso | Tipo | Cómo está resuelto |
+|---|---|---|
+| Mario corre, salta, cae | Dura | `UpdateLocomotionHandler` → `LocomotionResult.State` → `PlayerView.Render` |
+| Goomba aplastado | Dura | `WalkHandler` → `WalkResult.Status` → `GoombaView.Render`; el nodo se borra con la señal `AnimationFinished` |
+| Rebote al pisar | Lógica | `BounceHandler` (registrado) → `BounceRequested` → lo consume `UpdateLocomotionHandler` |
+| Parpadeo al recibir daño | Pasa una vez | `TakeDamageHandler` publica `PlayerDamagedEvent` → `PlayerView` lo escucha |
+| Monedas y vidas en el HUD | Pasa una vez (cambia de vez en cuando) | Valor inicial con `GetWallet`/`GetLives`; cambios por `WalletUpdatedEvent` / `PlayerLivesChangedEvent` |
+| Invulnerabilidad tras un golpe | Lógica | `TakeDamageHandler` la arranca; `UpdateInvulnerabilityHandler` la descuenta cada frame |
+| Muerte de Mario | Pasa una vez (morir) + dura (estar muerto) | `TakeDamage` publica `PlayerDiedEvent` → `DieHandler` marca `IsDead` y publica `GameOverEvent`; `UpdateLocomotionHandler` lee `IsDead` y hace el movimiento de muerte (`MovementState.Dead`); `PlayerView` muestra "dead" |
+| Game over | Pasa una vez | `GameOverEvent` (lo publica `Die`) → `GameBootstrap` congela el juego y reinicia; el HUD muestra el cartel |
+
+**Valores iniciales: casos de uso de consulta.** Un evento solo avisa de *cambios*; al arrancar todavía no hubo ninguno. Por eso, quien necesita el valor actual (por ejemplo el HUD en `_Ready`) lo pide **una vez** a un Handler de consulta: `GetLivesHandler`, `GetWalletHandler`. Es una *query* de sistemas de gestión: **solo lee**, no modifica nada ni publica eventos, y devuelve un valor o un `[Algo]Result` (nunca la entidad, para que la presentación no pueda modificarla).
+
+Un **hecho** y su **consecuencia** pueden ser dos eventos distintos sin ser redundantes: `PlayerDamagedEvent` ("te pegaron") y `PlayerLivesChangedEvent` ("ahora tenés X vidas"), igual que `PagoRecibido` y `SaldoActualizado` en un sistema de gestión.
+
 ---
 
 ## 9. Convenciones
@@ -332,6 +439,8 @@ Está en `src/Shared/Messaging/EventBus.cs`. Métodos:
 | Evento | `[Hecho]Event` (record, implementa `IEvent`) | junto al Handler que lo produce |
 | Evento de varios casos de uso | `[Hecho]Event` | `[Feature]/Events/` |
 | Nodo de Godot | `[Entity]Controller` | `Presentation/` |
+| Visual de una entidad | `[Entity]View` | `Presentation/` |
+| Resultado de un Handler con varios datos | `[Algo]Result` (record) | junto a su Handler |
 | Registro del módulo | `[Feature]ModuleExtensions.Add[Feature]Module()` | raíz de la feature |
 
 Además:

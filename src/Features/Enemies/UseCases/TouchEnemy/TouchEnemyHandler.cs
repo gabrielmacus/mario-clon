@@ -5,23 +5,24 @@ namespace MarioClone.Features.Enemies.UseCases.TouchEnemy;
 
 public class TouchEnemyHandler(EnemyRepository repository)
 {
-    // Devuelve true si el enemigo quedó derrotado
-    public bool Handle(TouchInput input)
+    public void Handle(TouchInput input)
     {
-        // 1. De costado o desde abajo: el golpe lo recibe el jugador
+        var enemy = repository.Get(input.EnemyId);
+
+        // 1. Un enemigo derrotado ya no lastima ni se puede volver a pisar
+        if (enemy.IsDefeated) return;
+
+        // 2. De costado o desde abajo: el golpe lo recibe el jugador
         if (input.PlayerVelocityY <= 0 || input.PlayerY >= input.EnemyY)
         {
             EventBus.Publish(new PlayerHitByEnemyEvent(input.PlayerId));
-            return false;
+            return;
         }
 
-        // 2. Pisotón: restar vida al enemigo
-        var enemy = repository.Get(input.EnemyId);
+        // 3. Pisotón: restar vida al enemigo
         enemy.Health -= 1;
-        bool defeated = enemy.Health <= 0;
 
-        // 3. Avisar (el jugador rebota; a futuro: puntaje, sonido)
-        EventBus.Publish(new EnemyStompedEvent(input.PlayerId, input.EnemyId, defeated));
-        return defeated;
+        // 4. Avisar (el jugador rebota, la View muestra el aplastado; a futuro: puntaje, sonido)
+        EventBus.Publish(new EnemyStompedEvent(input.PlayerId, input.EnemyId, enemy.IsDefeated));
     }
 }

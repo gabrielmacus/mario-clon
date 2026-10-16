@@ -38,6 +38,15 @@ Respondé en **español**.
 | 13 | Eventos y Handlers sobre una entidad llevan su ID | `int PlayerId = 1`, `ulong EnemyId` | sin ID |
 | 14 | Namespace = carpeta | `src/Features/World/UseCases/GenerateSegment` → `MarioClone.Features.World.UseCases.GenerateSegment` | — |
 | 15 | Todos los enemigos dentro de la feature `Enemies` | `Enemies/Presentation/KoopaController.cs` | feature `Koopa/` |
+| 16 | La View solo traduce: el **estado** (Idle, Running...) lo decide el Handler y la View lo mapea a una animación en cada frame | `_view.Render(result.State, result.Facing)` con un `switch` estado → animación | `if`s en la View que deciden si corre o salta; publicar `PlayerRunningEvent` cada frame |
+| 17 | Animaciones de **momento** (golpe, pisotón) se disparan escuchando eventos, filtrando por ID | `EnemyView` escucha `EnemyPunchedEvent` | el Handler llamando a una animación |
+| 18 | Los Handlers publican hechos de negocio, nunca piden efectos visuales | `EnemyPunchedEvent(EnemyId, BodyPart, ...)` | `ShowBloodEvent` |
+| 19 | Criterio: **¿dura o pasa una vez?** Lo que dura es estado (Handler → `Result` → `View.Render`); lo que pasa una vez es evento | Goomba aplastado = `EnemyStatus.Squashed` | animar el aplastado escuchando un evento |
+| 20 | La lógica se suscribe **solo** en `[Feature]ModuleExtensions` con `EventBus.Register`. Los controllers nunca se suscriben; solo Views y HUD, y solo para efectos de un instante | `EventBus.Register(Bounce)` | `PlayerController` suscripto a `EnemyStompedEvent` |
+| 21 | Banderas en el repositorio solo para lógica que consume otro Handler; nunca para efectos visuales o de sonido | `PlayerData.BounceRequested` | `PlayerData.BlinkRequested` |
+| 22 | Valores iniciales con Handlers de **consulta** (`Get[Algo]Handler`): solo leen, no modifican ni publican, devuelven un valor o un `Result` (nunca la entidad) | `HudController._Ready` → `GetLives.Handle(PlayerId)` | texto fijo en el `.tscn` que repite un valor del dominio |
+| 23 | El flujo de la aplicación (reiniciar, cambiar de nivel, pausar) lo maneja `GameBootstrap`, escuchando eventos | `GameOverEvent` → `GameBootstrap` recarga la escena | el HUD o un controller recargando la escena |
+| 24 | Los Handlers **nunca** usan otros Handlers (ni por constructor ni por `ModuleExtensions`): se comunican solo por eventos | `TakeDamage` publica `PlayerDiedEvent` → `Die` lo escucha | `UpdateLocomotionHandler(PlayerRepository, DieHandler die)` |
 
 ---
 
@@ -73,7 +82,7 @@ Respondé en **español**.
 - [ ] Hice solo lo pedido (lo demás quedó como propuesta).
 - [ ] Cada clase/record en su archivo, con namespace = carpeta.
 - [ ] Sin nombres completos en el código; todo con `using`.
-- [ ] Ninguna lógica nueva en nodos de `Presentation/`.
+- [ ] Ninguna lógica nueva en nodos de `Presentation/` (las Views solo traducen estados y reaccionan a eventos).
 - [ ] Handlers nuevos creados en su `ModuleExtensions` (y registrados si escuchan eventos).
 - [ ] Toda suscripción o alta tiene su baja en `_ExitTree`.
 - [ ] APIs de Godot verificadas contra `GodotSharp.dll`.
