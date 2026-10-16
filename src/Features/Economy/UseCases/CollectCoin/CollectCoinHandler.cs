@@ -3,11 +3,11 @@ using MarioClone.Shared.Messaging;
 
 namespace MarioClone.Features.Economy.UseCases.CollectCoin;
 
-public class CollectCoinHandler(EconomyState economy)
+public class CollectCoinHandler(WalletRepository walletRepository)
 {
     public void Handle(int playerId = 1, int value = 1)
     {
-        var wallet = economy.GetWallet(playerId);
+        var wallet = walletRepository.GetWallet(playerId);
         wallet.Coins += value;
         wallet.Score += value * 100;
 

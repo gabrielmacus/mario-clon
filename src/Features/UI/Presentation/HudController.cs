@@ -1,6 +1,6 @@
 using Godot;
 using MarioClone.Features.Economy.UseCases.CollectCoin;
-using MarioClone.Features.Player.UseCases.AddLife;
+using MarioClone.Features.Player.Events;
 using MarioClone.Shared.Messaging;
 
 namespace MarioClone.Features.UI.Presentation;

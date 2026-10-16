@@ -9,5 +9,6 @@ public record LocomotionInput(
     bool JumpRequested,
     bool IsOnFloor,
     float DeltaTime,
-    float Gravity
+    float Gravity,
+    bool BounceRequested
 );

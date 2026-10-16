@@ -9,7 +9,7 @@ public static class EconomyModuleExtensions
 
     public static void AddEconomyModule()
     {
-        var state = new EconomyState();
-        CollectCoin = new CollectCoinHandler(state);
+        var repository = new WalletRepository();
+        CollectCoin = new CollectCoinHandler(repository);
     }
 }

@@ -1,271 +1,396 @@
-# 🎮 Clean Game Architecture Blueprint (Godot 4 + C# 12)
-### Framework Arquitectónico Agnóstico: Vertical Slice, Handlers como Casos de Uso y EventBus
+# 🎮 MarioClone — Arquitectura de juego para Godot 4 + C#
 
-Este documento define la arquitectura estándar, patrones de diseño y directivas de desarrollo para proyectos en **Godot 4 (.NET / C# 12)**. 
+Juego de plataformas con **scroll lateral infinito** (estilo "dino de Google"), hecho para aprender Godot con C#.
+La arquitectura es **independiente del género**: sirve igual para un top-down, un roguelike o un simulador.
 
-Está diseñado para ser **agnóstico al género del juego** (plataformas, top-down, survival, roguelike, RTS) y optimizado para ser interpretado y ejecutado tanto por **desarrolladores de software** como por **Agentes de Inteligencia Artificial (LLMs)**.
+> 🤖 **Si sos un agente de IA:** leé también [`AGENTS.md`](AGENTS.md). Ahí están las reglas obligatorias y la forma de trabajar.
 
 ---
 
-## 🏛️ Filosofía Central: El Caso de Uso ES el Handler
+## Índice
 
-Para evitar la duplicación de abstracciones (`UseCase` vs `Handler`), **cada Caso de Uso es directamente su clase `Handler`**:
-* `CollectCoinHandler.cs` es el Caso de Uso de recolección de monedas.
-* `AddLifeHandler.cs` es el Caso de Uso de sumar vidas.
-* `UpdateLocomotionHandler.cs` es el Caso de Uso de locomoción y físicas.
+1. [Cómo correrlo](#1-cómo-correrlo)
+2. [La idea en una frase](#2-la-idea-en-una-frase)
+3. [Glosario: equivalencias con sistemas de gestión](#3-glosario-equivalencias-con-sistemas-de-gestión)
+4. [Las tres capas](#4-las-tres-capas)
+5. [Dos formas de comunicarse](#5-dos-formas-de-comunicarse)
+6. [Ejemplo completo: juntar una moneda](#6-ejemplo-completo-juntar-una-moneda)
+7. [Estructura de carpetas](#7-estructura-de-carpetas)
+8. [Las piezas, una por una](#8-las-piezas-una-por-una)
+9. [Convenciones](#9-convenciones)
+10. [Capas de colisión](#10-capas-de-colisión)
+11. [Recetas: cómo agregar cosas](#11-recetas-cómo-agregar-cosas)
+12. [Decisiones y límites conocidos](#12-decisiones-y-límites-conocidos)
 
-Todo se apoya en dos mecanismos claros:
+---
 
-1. **Invocación Directa (1 a 1):**  
-   Cuando un nodo de Godot necesita ejecutar lógica, **llama directamente al Handler** (`_locomotion.Handle(...)` o `EconomyModuleExtensions.CollectCoin.Handle(...)`).  
-   * **Ventaja:** Navegabilidad instantánea con `F12`, cero indirección, cero mediadores innecesarios para llamadas 1 a 1.
-2. **EventBus para Difusión Desacoplada (1 a N):**  
-   Cuando un Handler procesa sus reglas y muta su estado local, **emite un Evento al `EventBus`**.  
-   * **Ventaja:** La UI (HUD), el Audio, las Partículas y otros módulos reaccionan de forma 100% desacoplada.
+## 1. Cómo correrlo
+
+**Requisitos:** Godot **4.7 (.NET)** y el SDK de **.NET 8**.
+
+1. Abrir `project.godot` con Godot.
+2. Presionar **F5**.
+
+| Acción | Teclas |
+|---|---|
+| Moverse | ← → o A / D |
+| Saltar | Espacio, W o ↑ |
+
+**Qué hay hoy en el juego:**
+- El mundo se genera solo en tramos de 640 px a medida que avanzás, y los tramos que quedan atrás se borran.
+- Cada tramo trae piso, 1 a 3 plataformas, monedas y, a veces, un Goomba.
+- 100 monedas dan 1 vida.
+- Al Goomba lo matás pisándolo (y rebotás). Si te toca de costado, perdés una vida.
+- Todavía **no hay game over**: las vidas pueden quedar en negativo.
+
+---
+
+## 2. La idea en una frase
+
+> La lógica del juego se organiza **como un sistema de gestión orientado a eventos**: las entidades viven en repositorios, cada caso de uso es un `Handler` y los hechos importantes se avisan por un `EventBus`. Godot solo aporta los "periféricos": la entrada del teclado, la física y el dibujo en pantalla.
+
+---
+
+## 3. Glosario: equivalencias con sistemas de gestión
+
+| En este proyecto | En un sistema de gestión | Ejemplo |
+|---|---|---|
+| `[Entity]Data` | Entidad / una fila | `PlayerData`, `WalletData` |
+| `[Entity]Repository` | Repositorio / `DbSet` | `PlayerRepository` |
+| `[Acción]Handler` | Caso de uso / servicio de aplicación | `CollectCoinHandler` |
+| `[Algo]Input` | DTO de request / comando | `LocomotionInput` |
+| `[Hecho]Event` | Evento de dominio | `WalletUpdatedEvent` |
+| `EventBus` | Bus de mensajes en memoria | — |
+| `[Feature]ModuleExtensions` | Registro en DI (`services.AddXxx()`) | `AddPlayerModule()` |
+| `GameBootstrap` | `Program.cs` / composition root | — |
+| Nodo en `Presentation/` | Controller de una API / adaptador | `PlayerController` |
+| `MoveAndSlide()` | `SaveChanges()` | — |
+| Escena `.tscn` | Vista (HTML / XAML) | `Player.tscn` |
+| Tick de simulación | Cron job (pero con tiempo de juego) | — |
+
+---
+
+## 4. Las tres capas
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│  CAPA 1: ADAPTADORES / PRESENTACIÓN (Nodos como "Humble Objects")      │
-│  - Captura estímulos de hardware (Inputs, Colisiones, Reloj Delta)     │
-│  - Cero fórmulas matemáticas y cero lógica de decisión interna         │
-│  - Empaqueta los datos en un DTO inmutable y llama al Handler          │
-│  - Recibe el resultado y llama al driver físico: MoveAndSlide()        │
+│  CAPA 1: PRESENTACIÓN (nodos de Godot como "Humble Objects")           │
+│  - Capturan estímulos: teclado, colisiones, tiempo (delta)             │
+│  - No calculan ni deciden nada                                         │
+│  - Empaquetan los datos en un DTO y llaman al Handler                  │
+│  - Aplican el resultado: MoveAndSlide(), QueueFree(), etc.             │
 └───────────────────────────────────┬────────────────────────────────────┘
-                                    │  1. Invocación Directa (F12)
+                                    │  1. Llamada directa (F12 navega)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│  CAPA 2: DOMINIO Y CASOS DE USO (Handlers con Constructores Primarios) │
-│  - Clases Handler puras en C# 12 con constructores primarios           │
-│  - Mutan su PROPIO Estado Interno (PlayerWallet, PlayerState)          │
-│  - Aplican reglas de negocio (gravedad, inercia, 100 monedas = 1 vida) │
-│  - Emiten Eventos de Estado al EventBus: WalletUpdatedEvent, etc.      │
+│  CAPA 2: CASOS DE USO (Handlers)                                       │
+│  - Aplican las reglas: gravedad, salto, 100 monedas = 1 vida           │
+│  - Leen y modifican su repositorio (PlayerRepository, etc.)            │
+│  - Publican eventos con lo que pasó: WalletUpdatedEvent, etc.          │
 └───────────────────────────────────┬────────────────────────────────────┘
-                                    │  2. Notifica Hechos al EventBus (1 a N)
+                                    │  2. Eventos por el EventBus (1 a N)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│  CAPA 3: REACCIÓN Y SISTEMAS SATÉLITE (Desacoplados)                   │
-│  - UI (HUD): Escucha WalletUpdatedEvent y actualiza el saldo en pantalla│
-│  - Audio: Escucha PlayerJumpedEvent y reproduce "jump.wav"             │
-│  - Player: Auto-wired a BonusLifeAwardedEvent mediante su Handler      │
+│  CAPA 3: REACCIONES (desacopladas)                                     │
+│  - HUD: escucha WalletUpdatedEvent y actualiza el texto                │
+│  - Player: AddLifeHandler escucha BonusLifeAwardedEvent                │
+│  - A futuro: audio, partículas, logros                                 │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## ⚡ Constructores Primarios de C# 12 (Obligatorios)
+## 5. Dos formas de comunicarse
 
-Para eliminar boilerplate de campos privados y asignaciones manuales, **todas las clases y Handlers deben usar Constructores Primarios de C# 12**:
+| | Llamada directa (1 a 1) | EventBus (1 a N) |
+|---|---|---|
+| **Cuándo** | Un nodo necesita que se ejecute una regla | Pasó algo y a otros les puede interesar |
+| **Cómo** | `EconomyModuleExtensions.CollectCoin.Handle(...)` | `EventBus.Publish(new WalletUpdatedEvent(...))` |
+| **Ventaja** | F12 te lleva directo al código | Quien publica no conoce a quien escucha |
+| **Ejemplo** | La moneda le pide a Economy que la cobre | El HUD se entera de que cambió el saldo |
+
+⚠️ El `EventBus` es **solo para hechos puntuales** (saltó, juntó, murió). Nunca para algo que pasa en cada frame, como "la posición cambió".
+
+---
+
+## 6. Ejemplo completo: juntar una moneda
+
+1. El jugador toca una moneda. Godot dispara `BodyEntered` en `CoinNode`.
+2. `CoinNode` llama directo al caso de uso: `EconomyModuleExtensions.CollectCoin.Handle(playerId: 1, value: 1)` y se borra (`QueueFree()`).
+3. `CollectCoinHandler` busca la billetera en `WalletRepository`, suma la moneda y el puntaje, y publica `WalletUpdatedEvent`.
+4. `HudController`, que está suscripto a ese evento, actualiza el texto en pantalla.
+5. Si la billetera llega a 100 monedas, el Handler descuenta 100 y publica `BonusLifeAwardedEvent`.
+6. `AddLifeHandler` (feature Player) escucha ese evento, suma una vida y publica `PlayerLivesChangedEvent`.
+7. El HUD escucha ese otro evento y actualiza las vidas.
+
+Ni la moneda, ni Economy, ni Player saben que el HUD existe.
+
+---
+
+## 7. Estructura de carpetas
+
+```text
+mario-clon/
+├── AGENTS.md                                  <-- Reglas para agentes de IA
+├── README.md                                  <-- Este documento
+├── project.godot                              <-- Configuración de Godot (escena principal, teclas)
+├── scenes/                                    <-- Escenas (.tscn) = las "vistas"
+│   ├── Main.tscn                              <-- Escena principal: compone todo
+│   ├── Player.tscn · Goomba.tscn · Coin.tscn
+│   ├── Platform.tscn · Ground.tscn · Hud.tscn
+│
+└── src/
+    ├── Shared/                                <-- Infraestructura técnica común
+    │   ├── Messaging/
+    │   │   ├── IEvent.cs                      <-- Marca de "esto es un evento"
+    │   │   ├── IEventHandler.cs               <-- Contrato para Handlers que escuchan eventos
+    │   │   └── EventBus.cs                    <-- Bus estático 1 a N
+    │   └── Bootstrap/
+    │       └── GameBootstrap.cs               <-- Punto de entrada: registra los módulos
+    │
+    └── Features/                              <-- Un módulo por capacidad del juego
+        ├── [Feature]/                         <-- Ej: Player, Economy, Enemies, World
+        │   ├── [Feature]ModuleExtensions.cs   <-- Add[Feature]Module(): crea repositorio y Handlers
+        │   ├── Models/
+        │   │   ├── [Entity]Data.cs            <-- Entidad: un elemento (como una fila)
+        │   │   └── [Entity]Repository.cs      <-- Colección indexada por ID (como un DbSet)
+        │   ├── UseCases/
+        │   │   └── [Acción]/                  <-- Una carpeta por caso de uso
+        │   │       ├── [Acción]Handler.cs     <-- La lógica
+        │   │       ├── [Algo]Input.cs         <-- DTO de entrada (opcional)
+        │   │       └── [Hecho]Event.cs        <-- Eventos que produce este caso de uso
+        │   ├── Events/                        <-- Solo eventos producidos por VARIOS casos de uso
+        │   └── Presentation/
+        │       └── [Entity]Controller.cs      <-- Nodo de Godot (Humble Object)
+        │
+        ├── Collectibles/   Presentation/CoinNode.cs
+        ├── Economy/        Billetera: monedas, puntaje, vida extra
+        ├── Enemies/        Repositorio de enemigos, caminar, pisotón/golpe, GoombaController
+        ├── Player/         Vidas, movimiento, sumar/restar vidas, PlayerController
+        ├── UI/             Presentation/HudController.cs
+        └── World/          Generación de tramos (GenerateSegment) y WorldSpawner
+```
+
+**Regla de los namespaces:** siguen las carpetas.
+`src/Features/Player/UseCases/AddLife/` → `namespace MarioClone.Features.Player.UseCases.AddLife;`
+
+---
+
+## 8. Las piezas, una por una
+
+### 8.1 Entidad y repositorio (`Models/`)
+
+La entidad son los datos de **un** elemento. El repositorio es la **colección**, indexada por ID.
 
 ```csharp
-// CORRECTO (C# 12 Primary Constructor):
-public class CollectCoinHandler(EconomyState economy)
+public class PlayerData
+{
+    public int Lives { get; set; } = 3;
+}
+
+public class PlayerRepository
+{
+    private readonly Dictionary<int, PlayerData> _players = new();
+
+    public PlayerData GetPlayer(int playerId = 1) { /* crea si no existe */ }
+}
+```
+
+El repositorio lleva el nombre de **la entidad que guarda**, no el de la feature: Economy guarda `WalletData`, por eso su repositorio es `WalletRepository`.
+
+### 8.2 Handler (caso de uso)
+
+Recibe sus dependencias por **constructor primario** (C# 12), aplica las reglas y publica eventos.
+
+```csharp
+public class CollectCoinHandler(WalletRepository walletRepository)
 {
     public void Handle(int playerId = 1, int value = 1)
     {
-        var wallet = economy.GetWallet(playerId);
+        var wallet = walletRepository.GetWallet(playerId);
+        wallet.Coins += value;
+        EventBus.Publish(new WalletUpdatedEvent(playerId, wallet.Coins, wallet.Score));
         // ...
     }
 }
 ```
 
----
+No existen clases `...UseCase` aparte: **el Handler ES el caso de uso**.
 
-## 🔌 Auto-Wiring de Handlers de Eventos (`EventBus.Register`)
+### 8.3 Handler que reacciona a un evento
 
-Cuando un Handler reacciona a un evento, implementa la interfaz `IEventHandler<TEvent>`.  
-El `EventBus` deduce automáticamente el evento a partir de la interfaz (estilo Wolverine, sin reflexión pesada):
+Implementa `IEventHandler<TEvent>` y se registra con una línea.
 
 ```csharp
-// Features/Player/UseCases/AddLife/AddLifeHandler.cs
-public class AddLifeHandler(PlayerState playerState) : IEventHandler<BonusLifeAwardedEvent>
+public class AddLifeHandler(PlayerRepository playerRepository) : IEventHandler<BonusLifeAwardedEvent>
 {
-    // Único método: reacciona directamente al evento desacoplado
     public void Handle(BonusLifeAwardedEvent @event)
     {
-        var player = playerState.GetPlayer(@event.PlayerId);
+        var player = playerRepository.GetPlayer(@event.PlayerId);
         player.Lives += 1;
         EventBus.Publish(new PlayerLivesChangedEvent(@event.PlayerId, player.Lives));
     }
 }
 ```
 
-En la extensión del módulo, el registro es de una sola línea:
+### 8.4 Registro del módulo y punto de entrada
+
 ```csharp
 // Features/Player/PlayerModuleExtensions.cs
 public static void AddPlayerModule()
 {
-    var state = new PlayerState();
-    AddLife = new AddLifeHandler(state);
+    var repository = new PlayerRepository();
+    AddLife = new AddLifeHandler(repository);
+    TakeDamage = new TakeDamageHandler(repository);
 
-    // Auto-wiring instantáneo:
-    EventBus.Register(AddLife);
+    EventBus.Register(AddLife);      // C# deduce el evento desde IEventHandler<T>
+    EventBus.Register(TakeDamage);
+}
+
+// Shared/Bootstrap/GameBootstrap.cs (nodo dentro de Main.tscn)
+public override void _EnterTree()
+{
+    EventBus.Clear();
+    EconomyModuleExtensions.AddEconomyModule();
+    PlayerModuleExtensions.AddPlayerModule();
+    EnemiesModuleExtensions.AddEnemiesModule();
 }
 ```
 
----
+Se usa `_EnterTree` porque Godot lo ejecuta en todos los nodos **antes** de cualquier `_Ready`: cuando los demás nodos arrancan, los módulos ya existen.
 
-## 🏃 El Patrón "Humble Object" y `MoveAndSlide()`
+### 8.5 Controller como "Humble Object"
 
-`MoveAndSlide()` es el equivalente exacto a **`_dbContext.SaveChangesAsync()`** de Entity Framework:
-* El **Handler (`UpdateLocomotionHandler`)** es la *mente* que decide: calcula aceleración, fricción, gravedad y salto, devolviendo la `Velocity` resultante.
-* **`MoveAndSlide()`** es el *driver de hardware/física en C++*: aplica la velocidad en la pantalla evitando colisiones geométricas contra paredes y suelo.
-
-El controlador queda convertido en un **Humble Object** puro:
+El nodo **no calcula**: junta datos, llama al Handler y aplica el resultado.
+`MoveAndSlide()` es el equivalente a `SaveChanges()`: el Handler decide la velocidad y Godot la aplica resolviendo los choques.
 
 ```csharp
-// Features/Player/Presentation/PlayerController.cs
 public partial class PlayerController : CharacterBody2D
 {
+    [Export] public int PlayerId = 1;
     private readonly UpdateLocomotionHandler _locomotion = new();
-    private float _gravity = ProjectSettings.GetSetting("physics/2d/default_gravity").AsSingle();
 
     public override void _PhysicsProcess(double delta)
     {
-        // 1. Empaquetar entradas en un DTO inmutable
         var input = new LocomotionInput(
             CurrentVelocity: Velocity,
             Direction: Input.GetAxis("move_left", "move_right"),
             JumpRequested: Input.IsActionJustPressed("jump"),
             IsOnFloor: IsOnFloor(),
             DeltaTime: (float)delta,
-            Gravity: _gravity
+            Gravity: _gravity,
+            BounceRequested: _bounceRequested
         );
 
-        // 2. El Handler calcula y decide la nueva velocidad
-        Velocity = _locomotion.Handle(input, PlayerId: 1);
-
-        // 3. El driver físico de Godot ejecuta los choques en pantalla
-        MoveAndSlide();
+        Velocity = _locomotion.Handle(input, PlayerId);   // decide
+        MoveAndSlide();                                    // aplica
     }
 }
 ```
 
----
+### 8.6 Ciclo de vida: alta en `_Ready`, baja en `_ExitTree`
 
-## 🔒 Regla Estricta: Cohesión de Casos de Uso ("Cero Carpetas Sueltas")
+Godot llama a `_ExitTree()` **siempre** que un nodo sale de la escena: lo mataron, se cayó, lo borró el spawner o cambió el nivel. Por eso:
 
-**No existen carpetas `Events/` genéricas a nivel de módulo.**  
-Todo Caso de Uso reside en su propia subcarpeta junto con los Eventos que produce:
+| Si el nodo... | En `_Ready` | En `_ExitTree` |
+|---|---|---|
+| tiene datos en un repositorio | se da de alta (`SpawnEnemy`) | se da de baja (`DespawnEnemy`) |
+| escucha eventos | `EventBus.Subscribe(...)` | `EventBus.Unsubscribe(...)` |
 
-```text
-Features/[ModuleName]/UseCases/[UseCaseName]/
-├── [UseCaseName]Handler.cs       <-- Clase Handler con Constructor Primario
-├── [InputDto].cs                 <-- DTO inmutable de entrada (si aplica)
-└── [ProducedFact]Event.cs        <-- Evento producido por este caso de uso
-```
-
-Cada clase o record reside en **su propio archivo con su nombre exacto** (una clase/record por archivo).
-
----
-
-## 📂 Estructura Universal por Vertical Slice
-
-```text
-GameProject/
-├── src/
-│   ├── Shared/                               <-- Infraestructura técnica transversal
-│   │   ├── Messaging/
-│   │   │   ├── IEvent.cs                     <-- Contrato de Eventos
-│   │   │   ├── IEventHandler.cs              <-- Contrato de Event Handlers
-│   │   │   └── EventBus.cs                   <-- Bus estático ligero (Zero-GC, 1 a N)
-│   │   └── Bootstrap/
-│   │       └── GameBootstrap.cs              <-- Composition Root (Punto de entrada)
-│   │
-│   ├── Features/                             <-- Módulos Funcionales (Slices)
-│   │   │
-│   │   ├── [FeatureName]/                    <-- Ej: Economy, Player, Combat, Inventory
-│   │   │   ├── [Feature]ModuleExtensions.cs  <-- Add[Feature]Module()
-│   │   │   ├── Models/                       <-- Estado LOCAL (1 archivo por clase/enum)
-│   │   │   │   ├── [Entity]Data.cs
-│   │   │   │   └── [Feature]State.cs
-│   │   │   │
-│   │   │   ├── UseCases/                     <-- Casos de Uso autocontenidos
-│   │   │   │   └── [ActionName]/             <-- 1 carpeta por caso de uso
-│   │   │   │       ├── [ActionName]Handler.cs <-- Lógica pura (Constructor Primario)
-│   │   │   │       ├── [InputDto].cs         <-- DTO de entrada (opcional)
-│   │   │   │       └── [EventName]Event.cs   <-- Evento producido
-│   │   │   │
-│   │   │   └── Presentation/                 <-- Adaptadores de Godot (Humble Objects)
-│   │   │       ├── [Entity]Controller.cs     <-- Nodos físicos (CharacterBody, RigidBody)
-│   │   │       └── [Entity]View.cs           <-- Render (Sprites, Shaders, ColorRect)
-│   │   │
-│   │   ├── UI/                               <-- Slice de Interfaz
-│   │   │   └── Presentation/
-│   │   │       └── HudController.cs          <-- Escucha eventos del EventBus y actualiza textos
-│   │   │
-│   │   └── Audio/                            <-- Slice de Sonido
-│   │       └── Presentation/
-│   │           └── AudioController.cs        <-- Escucha eventos del EventBus y dispara .wav
-│   │
-│   └── Scenes/                               <-- Escenas (.tscn) y Prefabs de Godot
-```
-
----
-
-## ⚙️ El Núcleo de Difusión: `EventBus.cs`
+Si no se respeta, quedan "fantasmas": datos de enemigos que ya no existen o eventos enviados a nodos borrados.
 
 ```csharp
-using System;
-using System.Collections.Generic;
-
-namespace Game.Shared.Messaging;
-
-public interface IEvent { }
-
-public interface IEventHandler<TEvent> where TEvent : IEvent
-{
-    void Handle(TEvent @event);
-}
-
-public static class EventBus
-{
-    private static readonly Dictionary<Type, List<Delegate>> _subscribers = new();
-
-    public static void Register<TEvent>(IEventHandler<TEvent> handler) where TEvent : IEvent
-    {
-        Subscribe<TEvent>(handler.Handle);
-    }
-
-    public static void Subscribe<TEvent>(Action<TEvent> callback) where TEvent : IEvent
-    {
-        var type = typeof(TEvent);
-        if (!_subscribers.ContainsKey(type)) _subscribers[type] = new List<Delegate>();
-        _subscribers[type].Add(callback);
-    }
-
-    public static void Unsubscribe<TEvent>(Action<TEvent> callback) where TEvent : IEvent
-    {
-        var type = typeof(TEvent);
-        if (_subscribers.TryGetValue(type, out var list)) list.Remove(callback);
-    }
-
-    public static void Publish<TEvent>(TEvent @event) where TEvent : IEvent
-    {
-        if (_subscribers.TryGetValue(typeof(TEvent), out var list))
-        {
-            foreach (var del in list) ((Action<TEvent>)del)(@event);
-        }
-    }
-
-    public static void Clear()
-    {
-        _subscribers.Clear();
-    }
-}
+public override void _Ready()    => EnemiesModuleExtensions.SpawnEnemy.Handle(GetInstanceId());
+public override void _ExitTree() => EnemiesModuleExtensions.DespawnEnemy.Handle(GetInstanceId());
 ```
+
+`GetInstanceId()` es un ID único que Godot asigna a cada nodo.
+
+### 8.7 EventBus
+
+Está en `src/Shared/Messaging/EventBus.cs`. Métodos:
+
+| Método | Para qué |
+|---|---|
+| `Register(handler)` | Suscribe un Handler que implementa `IEventHandler<T>` |
+| `Subscribe<T>(callback)` / `Unsubscribe<T>(callback)` | Suscribe/desuscribe un método (lo usan los nodos) |
+| `Publish(evento)` | Avisa a todos los suscriptores, en orden de registro |
+| `Clear()` | Borra todo (se llama al iniciar la escena) |
+
+`Publish` recorre una **copia** de la lista, así un suscriptor puede desuscribirse en medio de un evento sin romper nada.
 
 ---
 
-## 🤖 Directivas de Codificación para Agentes de IA
+## 9. Convenciones
 
-Cuando un agente de IA genere o refactorice código en este proyecto, debe cumplir estrictamente las siguientes reglas:
+| Cosa | Nombre | Dónde |
+|---|---|---|
+| Entidad | `[Entity]Data` | `Models/` |
+| Repositorio | `[Entity]Repository` | `Models/` |
+| Caso de uso | `[Acción]Handler` | `UseCases/[Acción]/` |
+| DTO de entrada | `[Algo]Input` (record) | junto a su Handler |
+| Evento | `[Hecho]Event` (record, implementa `IEvent`) | junto al Handler que lo produce |
+| Evento de varios casos de uso | `[Hecho]Event` | `[Feature]/Events/` |
+| Nodo de Godot | `[Entity]Controller` | `Presentation/` |
+| Registro del módulo | `[Feature]ModuleExtensions.Add[Feature]Module()` | raíz de la feature |
 
-1. **EL CASO DE USO ES EL HANDLER:** Nombrar las clases de casos de uso con el sufijo `Handler` (ej: `CollectCoinHandler`, `UpdateLocomotionHandler`). Prohibido crear clases duplicadas `...UseCase`.
-2. **CONSTRUCTORES PRIMARIOS (C# 12):** Usar constructores primarios en todas las clases y Handlers que reciban dependencias o estados.
-3. **AUTO-WIRING DE EVENTOS:** Los Handlers que escuchen eventos deben implementar `IEventHandler<TEvent>` y registrarse mediante `EventBus.Register(handler)`.
-4. **CONTROLADORES COMO "HUMBLE OBJECTS":** Los scripts de nodos en `Presentation/` no deben contener fórmulas de aceleración, inercia o cálculos de negocio. Empaquetan entradas en DTOs, llaman al Handler, y delegan la física al motor (`MoveAndSlide()`).
-5. **UNA SOLA CLASE/RECORD POR ARCHIVO:** El nombre del archivo debe ser exactamente el nombre de la clase/record.
-6. **COHESIÓN DE CASOS DE USO:** Queda estrictamente prohibido crear carpetas `Events/` sueltas a nivel de módulo. Todo handler y los eventos que produce pertenecen a su subcarpeta `UseCases/[UseCaseName]/`.
-7. **IDENTIFICADORES DE ENTIDAD/JUGADOR:** Todos los Handlers y Eventos deben contemplar `int PlayerId = 1` o `string TargetId`.
-8. **PROHIBIDO EL ESTADO GLOBAL MONOLÍTICO:** Cada feature posee su propio estado local (`[Feature]State.cs`) indexado por ID en diccionarios.
-9. **PROHIBIDO SATURAR EL BUCLE A 60 FPS:** El `EventBus` es exclusivamente para **eventos discretos**.
+Además:
+- **Una clase o record por archivo**, con el nombre exacto.
+- **Constructores primarios** en toda clase que reciba dependencias.
+- **Siempre `using` + nombre corto**, nunca nombres completos (`MarioClone.Features...`) dentro del código.
+- **Eventos y Handlers que se refieren a una entidad llevan su ID**: `int PlayerId` (por defecto 1) o `ulong EnemyId`.
+- **Carpetas `Events/` sueltas, prohibidas**, salvo la excepción de la tabla.
+
+---
+
+## 10. Capas de colisión
+
+| Capa | Bit (valor en `.tscn`) | Quién está | Choca con (mask) |
+|---|---|---|---|
+| 1 — Mundo | 1 | Piso, plataformas | — |
+| 2 — Jugador | 2 | `Player` | Mundo (1) |
+| 3 — Enemigos | 4 | `Goomba` | Mundo (1) |
+
+Los detectores (Area2D) no ocupan capa (`collision_layer = 0`) y miran al jugador (`collision_mask = 2`): la moneda y el `Hitbox` del Goomba.
+Jugador y enemigos **se atraviesan**: el contacto lo detecta el `Hitbox` y lo decide `TouchEnemyHandler`.
+
+---
+
+## 11. Recetas: cómo agregar cosas
+
+### Un caso de uso nuevo
+1. Crear `Features/[Feature]/UseCases/[Acción]/[Acción]Handler.cs` con constructor primario.
+2. Si necesita varios datos de entrada, crear `[Algo]Input.cs` (record) en la misma carpeta.
+3. Si produce hechos, crear `[Hecho]Event.cs` en la misma carpeta y publicarlo con `EventBus.Publish`.
+4. Crear la instancia en `[Feature]ModuleExtensions` y exponerla como propiedad estática.
+5. Llamarlo desde el nodo que corresponda en `Presentation/`.
+
+### Reaccionar a un evento de otra feature
+1. Crear un Handler que implemente `IEventHandler<ElEvento>`.
+2. Registrarlo con `EventBus.Register(...)` en el `ModuleExtensions` de **tu** feature.
+3. Si quien reacciona es un **nodo** (por ejemplo, el HUD): `Subscribe` en `_Ready` y `Unsubscribe` en `_ExitTree`.
+
+### Un enemigo nuevo
+- **Mismo comportamiento, otros valores** (Goomba rápido): en Godot, *New Inherited Scene* desde `Goomba.tscn` y cambiar valores exportados.
+- **Comportamiento distinto** (uno que vuela): un controller nuevo en `Enemies/Presentation/`, un caso de uso de movimiento nuevo (por ejemplo `UseCases/Fly/`) y reutilizar `EnemyRepository`, `SpawnEnemy`, `DespawnEnemy` y `TouchEnemy`.
+- Todos los enemigos van dentro de la feature `Enemies`. Solo se separa en otra feature algo con reglas propias grandes (por ejemplo, un jefe con fases).
+
+### Algo que aparezca en el mundo
+1. Crear la escena en `scenes/`.
+2. Agregar su lista de posiciones a `SegmentPlan` y decidir dónde va en `GenerateSegmentHandler`.
+3. Agregar un `[Export] PackedScene` en `WorldSpawner`, instanciarlo en `Spawn()` y asignarlo en `Main.tscn`.
+
+### Una feature nueva
+1. Crear `Features/[Feature]/` con `Models/`, `UseCases/` y `Presentation/` según haga falta.
+2. Crear `[Feature]ModuleExtensions.Add[Feature]Module()`.
+3. Llamarlo desde `GameBootstrap._EnterTree()`.
+
+---
+
+## 12. Decisiones y límites conocidos
+
+- **Los datos viven fuera de los nodos**, en repositorios. Ideal para cosas únicas y permanentes (vidas, monedas, puntaje) y para simulaciones con muchas entidades. Para entidades que nacen y mueren seguido, es obligatoria la regla de alta/baja de la sección 8.6.
+- **Acceso estático:** los Handlers se usan desde cualquier lado a través de `[Feature]ModuleExtensions`. Es simple y navegable, a cambio de ser, en la práctica, global.
+- **Inspector de Godot:** los valores de ajuste (`Speed`, `JumpVelocity`...) son propiedades de los Handlers, así que no se ven en el editor. Cuando haga falta (variantes de enemigos), declarar `[Export]` en el controller y pasárselos al Handler en `_Ready`.
+- **Más archivos que un proyecto Godot típico.** Es el costo de que cada pieza se entienda sola.
+- **Exportación web:** hasta abril de 2026, Godot no exportaba proyectos C# para navegador. Verificarlo en *Proyecto → Exportar* antes de prometer una versión web.

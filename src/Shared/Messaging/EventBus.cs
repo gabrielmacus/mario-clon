@@ -35,7 +35,8 @@ public static class EventBus
     {
         if (_subscribers.TryGetValue(typeof(TEvent), out var list))
         {
-            foreach (var del in list)
+            // Se recorre una copia: así un suscriptor puede desuscribirse sin romper el foreach
+            foreach (var del in list.ToArray())
             {
                 ((Action<TEvent>)del)(@event);
             }

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace MarioClone.Features.Player.Models;
 
-public class PlayerState
+public class PlayerRepository
 {
     private readonly Dictionary<int, PlayerData> _players = new();
 

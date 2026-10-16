@@ -1,6 +1,6 @@
 namespace MarioClone.Features.Economy.Models;
 
-public class PlayerWallet
+public class WalletData
 {
 	public int Coins { get; set; } = 0;
 	public int Score { get; set; } = 0;

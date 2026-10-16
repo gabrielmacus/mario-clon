@@ -7,6 +7,7 @@ public class UpdateLocomotionHandler
 {
     public float Speed { get; set; } = 220.0f;
     public float JumpVelocity { get; set; } = -390.0f;
+    public float BounceVelocity { get; set; } = -250.0f;
     public float Acceleration { get; set; } = 1200.0f;
     public float Friction { get; set; } = 1400.0f;
 
@@ -27,7 +28,13 @@ public class UpdateLocomotionHandler
             EventBus.Publish(new PlayerJumpedEvent(playerId));
         }
 
-        // 3. Movimiento Horizontal (Inercia y aceleración)
+        // 3. Rebote al pisar un enemigo
+        if (input.BounceRequested)
+        {
+            velocity.Y = BounceVelocity;
+        }
+
+        // 4. Movimiento Horizontal (Inercia y aceleración)
         if (input.Direction != 0)
         {
             velocity.X = Mathf.MoveToward(velocity.X, input.Direction * Speed, Acceleration * input.DeltaTime);
